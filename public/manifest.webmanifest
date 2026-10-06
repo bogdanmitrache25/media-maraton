@@ -1,0 +1,19 @@
+{
+  "name": "Media Maratón 1:50",
+  "short_name": "MM 1:50",
+  "description": "Plan de 23 semanas para media maratón en 1:50 y prevención de periostitis tibial.",
+  "lang": "es",
+  "dir": "ltr",
+  "start_url": "/plan",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0f14",
+  "theme_color": "#0b0f14",
+  "categories": ["health", "sports", "fitness"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

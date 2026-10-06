@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Media Maratón 1:50 · Plan</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MM 1:50">
+<meta name="theme-color" content="#0b0f14">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0f14'/%3E%3Ctext x='50' y='68' font-size='54' text-anchor='middle'%3E%F0%9F%8F%83%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0b0f14; --bg2:#131a23; --bg3:#1b242f; --line:#243040;
+  --tx:#e8eef6; --tx2:#93a4b8; --tx3:#5f7288;
+  --acc:#22d3ee;
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%;overflow:hidden}
+body{
+  background:var(--bg);color:var(--tx);
+  font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;overscroll-behavior-y:none;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,select{font:inherit;color:inherit;background:var(--bg3);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
+
+/* ---------- layout ---------- */
+#app{display:flex;flex-direction:column;height:100%;overflow:hidden}
+header{
+  padding:calc(var(--safe-t) + 12px) 16px 12px;background:var(--bg);
+  border-bottom:1px solid var(--line);flex:none;
+}
+.hd-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.hd-title{font-size:17px;font-weight:700;letter-spacing:-.2px}
+.hd-sub{font-size:12px;color:var(--tx2);margin-top:2px}
+.hd-goal{font-size:12px;color:var(--acc);font-weight:700;white-space:nowrap}
+.bar{height:5px;border-radius:3px;background:var(--bg3);margin-top:11px;overflow:hidden}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,#22d3ee,#22c55e);transition:width .35s}
+.bar-lbl{display:flex;justify-content:space-between;font-size:11px;color:var(--tx3);margin-top:5px}
+
+main{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 14px calc(18px + var(--safe-b))}
+.view{display:none}.view.on{display:block}
+
+nav{
+  flex:none;display:flex;z-index:5;
+  padding:6px 8px calc(6px + var(--safe-b));
+  background:var(--bg2);border-top:1px solid var(--line);
+}
+nav button{flex:1;padding:7px 2px;border-radius:12px;font-size:10.5px;color:var(--tx3);font-weight:600;display:flex;flex-direction:column;align-items:center;gap:3px}
+nav button b{font-size:19px;font-weight:400;line-height:1}
+nav button.on{color:var(--acc);background:rgba(34,211,238,.09)}
+
+/* ---------- cards ---------- */
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+.card h3{margin:0 0 8px;font-size:15px;font-weight:700;letter-spacing:-.2px}
+.muted{color:var(--tx2);font-size:13.5px}
+.tiny{font-size:12px;color:var(--tx3)}
+
+.phase-h{display:flex;align-items:center;gap:9px;margin:22px 4px 10px;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.6px}
+.phase-h i{width:9px;height:9px;border-radius:50%;flex:none}
+.phase-h span{color:var(--tx2);font-weight:600;text-transform:none;letter-spacing:0;font-size:12px}
+
+.wk{background:var(--bg2);border:1px solid var(--line);border-radius:16px;margin-bottom:10px;overflow:hidden}
+.wk-h{display:flex;align-items:center;gap:11px;padding:13px 14px}
+.wk-h:active{background:var(--bg3)}
+.wk-num{width:38px;height:38px;flex:none;border-radius:11px;display:grid;place-items:center;font-weight:800;font-size:15px;background:var(--bg3)}
+.wk-mid{flex:1;min-width:0}
+.wk-t{font-size:14.5px;font-weight:650;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wk-s{font-size:11.5px;color:var(--tx3);margin-top:2px}
+.wk-km{font-size:12px;font-weight:700;color:var(--tx2);white-space:nowrap}
+.chk{width:17px;height:17px;border-radius:50%;border:1.5px solid var(--line);flex:none;transition:.2s}
+.wk.done .chk{background:#22c55e;border-color:#22c55e}
+.wk.done .wk-t{color:var(--tx2)}
+.wk.open .wk-km{color:var(--acc)}
+.wk-b{display:none;border-top:1px solid var(--line)}
+.wk.open .wk-b{display:block}
+.note{margin:10px 14px;padding:10px 12px;border-radius:11px;background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.18);font-size:12.5px;color:#b9e8f4}
+.note.warn{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.22);color:#f5cf95}
+.d{display:flex;gap:11px;padding:11px 14px;border-top:1px solid rgba(36,48,64,.6)}
+.d:first-child{border-top:0}
+.d-bar{width:3px;border-radius:2px;flex:none;background:var(--tx3)}
+.d-main{flex:1;min-width:0}
+.d-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.d-day{font-size:11.5px;font-weight:800;color:var(--tx3);width:30px;flex:none;text-transform:uppercase}
+.d-ttl{font-size:14px;font-weight:600;letter-spacing:-.2px}
+.d-desc{font-size:12.5px;color:var(--tx2);margin-top:3px}
+.d-cap{font-size:10.5px;font-weight:800;letter-spacing:.4px;padding:2px 7px;border-radius:6px;flex:none}
+.d.today{background:rgba(34,211,238,.06)}
+.d.today .d-day{color:var(--acc)}
+.d .box{width:26px;height:26px;flex:none;border-radius:9px;border:1.5px solid var(--line);display:grid;place-items:center;font-size:14px;color:transparent;margin-top:-2px}
+.d.ck .box{background:#22c55e;border-color:#22c55e;color:#04210f}
+.d-lock .box{opacity:.25}
+.d-lock{opacity:.45}
+
+.tA{background:rgba(249,115,22,.16);color:#fdba74}
+.tB{background:rgba(239,68,68,.16);color:#fca5a5}
+.tC{background:rgba(6,182,212,.14);color:#67e8f9}
+.tG{background:rgba(139,92,246,.16);color:#c4b5fd}
+.tR{background:rgba(148,163,184,.12);color:#94a3b8}
+.tT{background:rgba(234,179,8,.16);color:#fde047}
+.tZ{background:rgba(34,197,94,.16);color:#86efac}
+
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:var(--bg3);color:var(--tx2);margin:0 6px 6px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid rgba(36,48,64,.7)}
+th{color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+.acc{border-left:3px solid var(--line);padding-left:11px;margin:12px 0}
+.acc b{display:block;font-size:13.5px;margin-bottom:3px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fld{margin-bottom:10px}
+.fld label{display:block;font-size:11.5px;color:var(--tx3);font-weight:700;margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px}
+#acwrOut{font-size:30px;font-weight:800;letter-spacing:-1px}
+.legend{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px}
+.legend i{font-style:normal;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px}
+.big{font-size:15px;font-weight:650}
+ul.clean{margin:6px 0;padding-left:0;list-style:none}
+ul.clean li{padding:7px 0 7px 22px;position:relative;font-size:13.5px;color:var(--tx2);border-bottom:1px solid rgba(36,48,64,.5)}
+ul.clean li:last-child{border-bottom:0}
+ul.clean li:before{content:"";position:absolute;left:6px;top:14px;width:5px;height:5px;border-radius:50%;background:var(--acc)}
+ul.clean li b{color:var(--tx)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="hd-row">
+      <div>
+        <div class="hd-title">Media Maratón</div>
+        <div class="hd-sub" id="hdSub">14 de marzo de 2027</div>
+      </div>
+      <div class="hd-goal">OBJETIVO 1:50</div>
+    </div>
+    <div class="bar"><i id="pbar" style="width:0%"></i></div>
+    <div class="bar-lbl"><span id="pTxt">0 % completado</span><span id="pSes">0/0 sesiones</span></div>
+  </header>
+
+  <main>
+    <section class="view on" id="v-hoy"></section>
+    <section class="view" id="v-plan"></section>
+    <section class="view" id="v-pre"></section>
+    <section class="view" id="v-reg"></section>
+  </main>
+
+  <nav>
+    <button data-v="hoy" class="on"><b>◎</b>Hoy</button>
+    <button data-v="plan"><b>▤</b>Plan</button>
+    <button data-v="pre"><b>✚</b>Prevención</button>
+    <button data-v="reg"><b>✎</b>Registro</button>
+  </nav>
+</div>
+
+<script>
+/* =========================================================
+   DATOS
+   ========================================================= */
+const PHASES = {
+  1:{n:"Reintroducción y blindaje", c:"#3b82f6", w:"S1 – S4"},
+  2:{n:"Base aeróbica",             c:"#22c55e", w:"S5 – S11"},
+  3:{n:"Específico media maratón",  c:"#f59e0b", w:"S12 – S18"},
+  4:{n:"Pico y afinado",            c:"#ef4444", w:"S19 – S20"},
+  5:{n:"Taper",                     c:"#eab308", w:"S21 – S22"},
+  6:{n:"Semana de carrera",         c:"#a855f7", w:"S23"}
+};
+
+const TYPES = {
+  A:{lbl:"LARGA",   cls:"tA", bar:"#f97316"},
+  B:{lbl:"CALIDAD", cls:"tB", bar:"#ef4444"},
+  C:{lbl:"CROSS",   cls:"tC", bar:"#06b6d4"},
+  G:{lbl:"GYM",     cls:"tG", bar:"#8b5cf6"},
+  R:{lbl:"DESCANSO",cls:"tR", bar:"#475569"},
+  T:{lbl:"TEST",    cls:"tT", bar:"#eab308"},
+  Z:{lbl:"CARRERA", cls:"tZ", bar:"#22c55e"}
+};
+const DAYN = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+
+/* [tipo, título, descripción] — 7 días, Lun→Dom */
+const W = [
+{n:1,  s:"2026-10-05", km:"8 km",  p:1, f:"Empezar y montar el protocolo", note:"Ningún test esta semana. Nada de series fuertes.", warn:1, d:[
+  ["R","—","Semana no iniciada"],
+  ["C","Bici Z2 · 40 min","Hoy: medición basal (palpación tibial) + pedir analítica"],
+  ["B","Calidad · 3 km","Trote continuo RPE 3 + 4×20 s de progresiones"],
+  ["C","Cinta · 10 % / 4,0 km/h × 20 min","Cinta de correr"],
+  ["G","Gym — torso","Arranca la rutina sóleo (ejercicios 1, 3, 5, 6)"],
+  ["R","Descanso total + TB","Cuenta tu cadencia durante 30 s"],
+  ["A","Tirada larga · 5 km","5×(4 min trote muy suave + 2 min caminata). RPE 3"]]},
+
+{n:2,  s:"2026-10-12", km:"10 km", p:1, f:"Igual que S1, un poco más largo", d:[
+  ["G","Gym — pierna pesada",""],
+  ["C","Bici Z2 · 45 min",""],
+  ["B","Calidad · 4 km","Trote continuo RPE 3-4 + 4×20 s de progresiones"],
+  ["C","Cinta · 11 % / 4,0 km/h × 25 min",""],
+  ["G","Gym — torso","Rutina sóleo"],
+  ["R","Descanso total + TB",""],
+  ["A","Tirada larga · 6 km","6×(4 min trote + 2 min caminata). RPE 3-4"]]},
+
+{n:3,  s:"2026-10-19", km:"12 km", p:1, f:"Primera tirada continua sin caminata", d:[
+  ["G","Gym — pierna pesada",""],
+  ["C","Bici Z2 · 50 min",""],
+  ["B","Calidad · 5 km","2 km fácil + 4×(2 min RPE 5-6 / 2 min fácil) + 1 km fácil"],
+  ["C","Cinta · 12 % / 4,0 km/h × 30 min",""],
+  ["G","Gym — torso","Rutina sóleo 4×/sem"],
+  ["R","Descanso total + TB","Revisa tu calzado: necesitas 2 pares en rotación"],
+  ["A","Tirada larga · 7 km","Rodaje continuo RPE 4 (sin caminata)"]]},
+
+{n:4,  s:"2026-10-26", km:"9 km", p:1, f:"Primera descarga", note:"Sin cinta inclinada esta semana. Cierre: repite el test de palpación y calcula el ACWR.", d:[
+  ["G","Gym — pierna ligera",""],
+  ["C","Bici Z2 · 40 min",""],
+  ["B","Calidad · 3,5 km","Rodaje suave RPE 3 + 4×20 s de progresiones"],
+  ["R","Descanso + TB","Sin cinta inclinada"],
+  ["G","Gym — torso",""],
+  ["R","Descanso total + TB",""],
+  ["A","Tirada larga · 5,5 km","Rodaje muy suave RPE 3"]]},
+
+{n:5,  s:"2026-11-02", km:"15 km", p:2, f:"Construir motor, la carrera crece despacio", d:[
+  ["G","Gym — pierna pesada",""],
+  ["C","Bici Z2 · 60 min",""],
+  ["B","Calidad · 7 km","2 km fácil + 3×(3 min RPE 6 / 2 min fácil) + 2 km fácil"],
+  ["C","Cinta · 13 % / 4,0 km/h × 35 min",""],
+  ["G","Gym — torso","Empieza el colágeno + vit C 45-60 min antes de las cargas"],
+  ["R","Descanso total + TB",""],
+  ["A","Tirada larga · 8 km","Rodaje continuo Z2. RPE 4"]]},
+
+{n:6,  s:"2026-11-09", km:"17 km", p:2, f:"Semana de control", note:"Si aparece cualquier amarillo, en la S7 NO subes volumen.", warn:1, d:[
+  ["G","Gym — pierna pesada",""],
+  ["C","Bici Z2 · 60 min",""],
+  ["B","Calidad · 8 km","3 km fácil + 5×(2 min RPE 6-7 / 90 s fácil) + 1 km fácil"],
+  ["C","Cinta · 14 % / 4,0 km/h × 35 min",""],
+  ["G","Gym — torso",""],
+  ["R","Descanso total + TB","Primera revisión formal del semáforo de dolor"],
+  ["A","Tirada larga · 9 km","7 km Z2 + 2 km finales a RPE 5-6"]]},
+
+{n:7,  s:"2026-11-16", km:"18 km", p:2, test:1, f:"TEST 5K — se recalibra todo", note:"Con el resultado, recalcula toda la tabla de ritmos.", d:[
+  ["G","Gym — pierna ligera","Nada pesado: hay test el miércoles"],
+  ["R","Descanso o bici 30 min muy suave",""],
+  ["T","TEST DE 5K EN CINTA","15 min calentamiento progresivo + 5K a tope controlado + 10 min enfriamiento"],
+  ["R","Descanso + TB",""],
+  ["G","Gym — torso",""],
+  ["R","Descanso total",""],
+  ["A","Tirada larga · 10 km","Rodaje suave Z2"]]},
+
+{n:8,  s:"2026-11-23", km:"15 km", p:2, f:"Descarga", d:[
+  ["G","Gym — pierna ligera",""],
+  ["C","Bici Z2 · 45 min",""],
+  ["B","Calidad · 7 km","3 km fácil + 6×(1 min RPE 7 / 1 min fácil) + 1 km fácil"],
+  ["C","Cinta · 10 % / 4,0 km/h × 25 min",""],
+  ["G","Gym — torso",""],
+  ["R","Descanso total + TB + masaje",""],
+  ["A","Tirada larga · 8 km","Rodaje suave Z2"]]},
+
+{n:9,  s:"2026-11-30", km:"21 km", p:2, f:"Empieza la especificidad: primeros intervalos de verdad", d:[
+  ["G","Gym — pierna pesada",""],
+  ["C","Bici Z2 · 65 min",""],
+  ["B","Calidad · 10 km","3 km fácil + 3×2000 m RPE 7 (rec 2 min trote) + 1 km fácil"],
+  ["C","Cinta · 15 % / 4,0 km/h × 40 min",""],
+  ["G","Gym — torso",""],
+  ["R","Descanso total + TB","Añade los pogo hops (ejercicio 7). Cadencia objetivo 176"],
+  ["A","Tirada larga · 11 km","8 km Z2 + 3 km a RPE 6"]]},
+
+{n:10, s:"2026-12-07", km:"24 km", p:2, f:"Volumen alto de fase 2", d:[
+  ["G","Gym — pierna pesada",""],
+  ["C","Bici Z2 · 70 min",""],
+  ["B","Calidad · 12 km","3 km fácil + 3×3000 m RPE 7 (rec 2 min) + 1 km fácil"],
+  ["C","Cinta · 15 % / 4,2 km/h × 45 min",""],
+  ["G","Gym — torso",""],
+  ["R","Descanso total + TB","Revisa los km de tus zapatillas"],
+  ["A","Tirada larga · 12 km","8 km Z2 + 4 km a ritmo steady (RPE 5)"]]},
+
+{n:11, s:"2026-12-14", km:"20 km", p:2, f:"Descarga (Navidad)", note:"En vacaciones, la rutina tibial es lo ÚLTIMO que se sacrifica. Cuidado con el alcohol.", warn:1, d:[
+  ["G","Gym — pierna ligera",""],
+  ["C","Bici Z2 · 45 min",""],
+  ["B","Calidad · 10 km","3 km fácil + 4×1000 m RPE 6-7 (rec 90 s) + 1 km fácil"],
+  ["R","Descanso + TB",""],
+  ["G","Gym — torso",""],
+  ["R","Descanso total",""],
+  ["A","Tirada larga · 10 km","Rodaje Z2 suave"]]},
+
+{n:12, s:"2026-12-21", km:"25 km", p:3, f:"Primer bloque a ritmo de media maratón", d:[
+  ["G","Gym — pierna pesada",""],
+  ["C","Bici Z2 · 60 min",""],
+  ["B","Calidad · 12 km","4 km fácil + 4×1500 m RPE 7-8 (rec 2 min) + 1 km fácil"],
+  ["C","Cinta · 15 % / 4,2 km/h × 45 min",""],
+  ["G","Gym — torso","(o descanso: es Navidad)"],
+  ["R","Descanso total + TB","Vigila el sueño en fiestas"],
+  ["A","Tirada larga · 13 km","8 km Z2 + 5 km a ritmo de media maratón (5:13/km)"]]},
+
+{n:13, s:"2026-12-28", km:"28 km", p:3, f:"Cierre de fiestas", d:[
+  ["G","Gym — pierna pesada",""],
+  ["C","Bici Z2 · 60 min",""],
+  ["B","Calidad · 14 km","4 km fácil + 2×4000 m RPE 7 (rec 2 min) + 1 km fácil"],
+  ["C","Cinta · 15 % / 4,2 km/h × 45 min",""],
+  ["G","Gym — torso","(o descanso)"],
+  ["R","Descanso total + TB","Test de palpación tibial"],
+  ["A","Tirada larga · 14 km","8 km Z2 + 6 km a ritmo de media maratón"]]},
+
+{n:14, s:"2027-01-04", km:"22 km", p:3, test:1, f:"CHECKPOINT DEL OBJETIVO. Aquí decidimos", note:"10K ≤ 49:00 → seguimos a 1:50 · 49-53 → 1:55 · >53 → 2:00-2:05.", warn:1, d:[
+  ["G","Gym — pierna ligera",""],
+  ["R","Descanso o bici 30 min muy suave",""],
+  ["T","TEST DE 10K","15 min calentamiento progresivo + 10K a tope controlado + 10 min enfriamiento"],
+  ["R","Descanso + TB",""],
+  ["G","Gym — torso","Repite analítica (ferritina + vitamina D)"],
+  ["R","Descanso total",""],
+  ["A","Tirada larga · 9 km","Rodaje suave Z2"]]},
+
+{n:15, s:"2027-01-11", km:"30 km", p:3, f:"Primera semana con bloques largos a ritmo de carrera", note:"Si aparece amarillo, corta el bloque de ritmo y termina en Z2.", d:[
+  ["G","Gym — pierna pesada",""],
+  ["C","Bici Z2 · 65 min",""],
+  ["B","Calidad · 15 km","4 km fácil + 5×2000 m a ritmo umbral (Z4) (rec 90 s) + 2 km fácil"],
+  ["C","Cinta · 15 % / 4,5 km/h × 45 min",""],
+  ["G","Gym — torso",""],
+  ["R","Descanso total + TB",""],
+  ["A","Tirada larga · 15 km","8 km Z2 + 7 km a ritmo de media maratón"]]},
+
+{n:16, s:"2027-01-18", km:"25 km", p:3, f:"Descarga", d:[
+  ["G","Gym — pierna ligera",""],
+  ["C","Bici Z2 · 50 min",""],
+  ["B","Calidad · 13 km","4 km fácil + 6×1000 m a ritmo Z4 (rec 90 s) + 2 km fácil"],
+  ["C","Cinta · 12 % / 4,2 km/h × 30 min",""],
+  ["G","Gym — torso","Revisión de calzado: recambio si un par pasa de 600 km"],
+  ["R","Descanso total + TB + masaje",""],
+  ["A","Tirada larga · 12 km","Rodaje Z2 suave"]]},
+
+{n:17, s:"2027-01-25", km:"33 km", p:3, f:"PICO DE FASE", note:"Semana dura: duerme 8 h, sube proteína a 1,8 g/kg, vigila el semáforo al máximo.", warn:1, d:[
+  ["G","Gym — pierna pesada",""],
+  ["C","Bici Z2 · 60 min",""],
+  ["B","Calidad · 16 km","4 km fácil + 2×5000 m a ritmo de media maratón (rec 3 min) + 2 km fácil"],
+  ["C","Cinta · 15 % / 4,5 km/h × 45 min",""],
+  ["G","Gym — torso",""],
+  ["R","Descanso total + TB",""],
+  ["A","Tirada larga · 17 km","10 km Z2 + 7 km a ritmo de media maratón. Puedes estrenar la placa de carbono"]]},
+
+{n:18, s:"2027-02-01", km:"25 km", p:3, race:1, f:"Tune-up: aprendes a competir", note:"Practica aquí la rutina completa: desayuno, calentamiento, gel, ritmo.", d:[
+  ["G","Gym — pierna ligera",""],
+  ["R","Descanso o bici 30 min muy suave",""],
+  ["A","Tirada larga · 12 km","Rodaje suave Z2 (la tirada se mueve a mitad de semana)"],
+  ["R","Descanso + TB",""],
+  ["G","Gym — torso ligero",""],
+  ["R","Descanso total","Prepara la logística de la carrera"],
+  ["Z","TUNE-UP — 10K a ritmo de competición","Carrera real o simulacro en cinta"]]},
+
+{n:19, s:"2027-02-08", km:"34 km", p:4, f:"PICO 1 — máxima carga del plan", note:"Calcula el ACWR y cuida el sueño. Máxima carga del plan.", warn:1, d:[
+  ["G","Gym — pierna pesada",""],
+  ["C","Bici Z2 · 60 min",""],
+  ["B","Calidad · 16 km","4 km fácil + 4×2000 m a ritmo de media maratón (rec 90 s) + 2 km fácil"],
+  ["C","Cinta · 15 % / 4,5 km/h × 45 min",""],
+  ["G","Gym — torso",""],
+  ["R","Descanso total + TB",""],
+  ["A","Tirada larga · 18 km","10 km Z2 + 8 km a ritmo de media maratón — tu tirada más larga"]]},
+
+{n:20, s:"2027-02-15", km:"29 km", p:4, f:"PICO 2 — última semana de carga real", note:"Sin cinta inclinada a partir de esta semana. La prevención pasa a ser gestión de frescura.", d:[
+  ["G","Gym — pierna ligera",""],
+  ["C","Bici Z2 · 50 min","Sin cinta inclinada a partir de esta semana"],
+  ["B","Calidad · 13 km","4 km fácil + 3×3000 m a ritmo de media maratón (rec 2 min) + 2 km fácil"],
+  ["R","Descanso o bici suave",""],
+  ["G","Gym — torso ligero",""],
+  ["R","Descanso total + TB",""],
+  ["A","Tirada larga · 16 km","6 km Z2 + 10 km a ritmo de media maratón (simulacro de media)"]]},
+
+{n:21, s:"2027-02-22", km:"22 km", p:5, f:"TAPER 1 (−35 %)", note:"No estrenes nada: ni zapatillas, ni geles, ni rutinas nuevas.", warn:1, d:[
+  ["G","Gym — pierna ligera",""],
+  ["C","Bici Z2 · 40 min",""],
+  ["B","Calidad · 10 km","4 km fácil + 5×1000 m a ritmo de media maratón (rec 90 s) + 1 km fácil"],
+  ["R","Descanso + TB",""],
+  ["G","Gym — torso ligero",""],
+  ["R","Descanso total",""],
+  ["A","Tirada larga · 12 km","6 km Z2 + 4 km a ritmo de media maratón + 2 km fácil"]]},
+
+{n:22, s:"2027-03-01", km:"15 km", p:5, f:"TAPER 2 (−55 %)", d:[
+  ["R","Descanso o gimnasio muy ligero",""],
+  ["C","Bici Z2 · 30 min suave","(opcional)"],
+  ["B","Calidad · 6 km","3 km fácil + 4×400 m a ritmo de media maratón (rec 60 s) + 1 km fácil"],
+  ["R","Descanso + TB",""],
+  ["R","Descanso total",""],
+  ["R","Descanso total","Logística de carrera: dorsal, ropa, geles, plan de viaje"],
+  ["A","Tirada larga · 9 km","5 km Z2 + 4 km a ritmo de media maratón"]]},
+
+{n:23, s:"2027-03-08", km:"carrera", p:6, f:"Semana de carrera", note:"Ritmo objetivo: km 1-3 a 5:25 · km 3-10 a 5:15 · km 10-21,1 a 5:10. Geles: min 30-35, min 65-70 y (opcional) min 95-100.", d:[
+  ["R","Descanso total",""],
+  ["A","7 km — activación","5 km Z2 + 4×100 m de progresiones"],
+  ["R","Descanso o bici 25 min muy suave","Empieza la carga de hidratos (7-8 g/kg/día ≈ 550-620 g/día)"],
+  ["B","6 km — última sesión seria","4 km Z2 + 2 km a ritmo de media maratón"],
+  ["R","Descanso total","Carga de hidratos al máximo"],
+  ["A","Activación · 4 km","4 km muy suaves + 3×100 m a ritmo de media maratón. Prepara todo y duerme bien"],
+  ["Z","MEDIA MARATÓN — objetivo 1:50:00",""]]}
+];
+
+/* =========================================================
+   ESTADO
+   ========================================================= */
+const KEY="mm150_state_v1";
+let S = JSON.parse(localStorage.getItem(KEY) || '{"done":{},"log":{}}');
+if(!S.done) S.done={}; if(!S.log) S.log={};
+const save=()=>localStorage.setItem(KEY,JSON.stringify(S));
+const iso=d=>d.toISOString().slice(0,10);
+const TODAY=iso(new Date());
+const parse=s=>new Date(s+"T12:00:00");
+
+const dateRange=(s)=>{
+  const a=parse(s), b=new Date(a.getTime()+6*864e5);
+  const f=d=>d.toLocaleDateString("es-ES",{day:"numeric",month:"short"}).replace(/\./g,"");
+  return f(a)+" – "+f(b);
+};
+const weekEnd=w=>iso(new Date(parse(w.s).getTime()+6*864e5));
+
+// acciones contables: todo lo que no es descanso puro
+const countable=t=>t!=="R";
+const weekTotal=w=>w.d.filter(([t])=>countable(t)).length;
+const weekDone=w=>w.d.filter(([t],i)=>countable(t)&&S.done[w.n+"-"+i]).length;
+
+/* =========================================================
+   RENDER · PLAN
+   ========================================================= */
+function renderPlan(){
+  let h="";
+  Object.keys(PHASES).map(Number).forEach(p=>{
+    const ph=PHASES[p], ws=W.filter(w=>w.p===p);
+    if(!ws.length) return;
+    h+=`<div class="phase-h"><i style="background:${ph.c}"></i>${ph.n}<span>${ph.w}</span></div>`;
+    ws.forEach(w=>{
+      const tot=weekTotal(w), dn=weekDone(w);
+      const complete=dn===tot&&tot>0;
+      h+=`<div class="wk ${complete?"done":""}" data-w="${w.n}">
+        <div class="wk-h">
+          <div class="wk-num" style="color:${ph.c}">S${w.n}</div>
+          <div class="wk-mid">
+            <div class="wk-t">${w.f}</div>
+            <div class="wk-s">${dateRange(w.s)} · ${dn}/${tot} sesiones${w.test?" · 🔬 TEST":""}${w.race?" · 🏁":""}</div>
+          </div>
+          <div class="wk-km">${w.km}</div>
+          <div class="chk"></div>
+        </div>
+        <div class="wk-b">
+          ${w.note?`<div class="note ${w.warn?"warn":""}">${w.warn?"⚠️ ":"🎯 "}${w.note}</div>`:""}
+          ${w.d.map(([t,ttl,desc],i)=>{
+            const T=TYPES[t], key=w.n+"-"+i, on=S.done[key]?"ck":"", lock=countable(t)?"":"d-lock";
+            const isToday=dateOf(w.n,i)===TODAY?"today":"";
+            return `<div class="d ${on} ${lock} ${isToday}" data-k="${key}">
+              <div class="d-bar" style="background:${T.bar}"></div>
+              <div class="d-day">${DAYN[i]}</div>
+              <div class="d-main">
+                <div class="d-top"><span class="d-cap ${T.cls}">${T.lbl}</span><span class="d-ttl">${ttl}</span></div>
+                ${desc?`<div class="d-desc">${desc}</div>`:""}
+              </div>
+              <div class="box">✓</div>
+            </div>`;
+          }).join("")}
+        </div>
+      </div>`;
+    });
+  });
+  document.getElementById("v-plan").innerHTML=h;
+}
+
+const dateOf=(weekN,dayIdx)=>{
+  const w=W.find(x=>x.n===weekN); if(!w) return "";
+  const d=parse(w.s); d.setDate(d.getDate()+dayIdx); return iso(d);
+};
+
+/* =========================================================
+   RENDER · HOY
+   ========================================================= */
+function renderHoy(){
+  let cur=null, dayIdx=-1;
+  W.forEach(w=>{ for(let i=0;i<7;i++){ if(dateOf(w.n,i)===TODAY){cur=w;dayIdx=i;} } });
+  let h="";
+  if(cur){
+    const ph=PHASES[cur.p];
+    h+=`<div class="card" style="border-color:${ph.c}55">
+      <div class="tiny" style="color:${ph.c};font-weight:800;letter-spacing:.5px">FASE ${cur.p} · ${ph.n.toUpperCase()}</div>
+      <h3 style="font-size:19px;margin:6px 0 2px">Semana ${cur.n} · ${dateRange(cur.s)}</h3>
+      <div class="muted">${cur.f} · ${cur.km}</div>
+    </div>`;
+    const [t,ttl,desc]=cur.d[dayIdx], T=TYPES[t];
+    h+=`<div class="card">
+      <div class="tiny">HOY · ${DAYN[dayIdx].toUpperCase()}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin:8px 0 4px">
+        <span class="d-cap ${T.cls}">${T.lbl}</span>
+        <span class="big">${ttl}</span>
+      </div>
+      ${desc?`<div class="muted">${desc}</div>`:""}
+      ${countable(t)?`<div class="d ${S.done[cur.n+"-"+dayIdx]?"ck":""}" data-k="${cur.n}-${dayIdx}" style="border:0;padding:12px 0 0">
+          <div class="d-main"><div class="d-ttl" style="font-size:13px;color:var(--tx2)">Marcar como hecha</div></div>
+          <div class="box">✓</div></div>`:`<div class="tiny" style="margin-top:10px">Día de descanso. TB: rutina tibial/sóleo 8-10 min.</div>`}
+    </div>`;
+    h+=`<div class="card"><h3>Resto de la semana</h3>`;
+    cur.d.forEach(([tt,ttl2,desc2],i)=>{
+      const on=S.done[cur.n+"-"+i]?"ck":"", lock=countable(tt)?"":"d-lock";
+      h+=`<div class="d ${on} ${lock} ${i===dayIdx?"today":""}" data-k="${cur.n}-${i}" style="border-top:1px solid rgba(36,48,64,.6)">
+        <div class="d-bar" style="background:${TYPES[tt].bar}"></div>
+        <div class="d-day">${DAYN[i]}</div>
+        <div class="d-main">
+          <div class="d-top"><span class="d-ttl">${ttl2}</span></div>
+          ${desc2?`<div class="d-desc">${desc2}</div>`:""}
+        </div><div class="box">✓</div></div>`;
+    });
+    h+=`</div>`;
+  } else {
+    const first=parse(W[0].s);
+    h+=`<div class="card"><h3>Fuera de la ventana del plan</h3>
+      <div class="muted">Hoy no cae dentro de las 23 semanas de preparación.</div>
+      <div class="muted" style="margin-top:8px">El plan arranca el 5 de octubre de 2026 y termina el 14 de marzo de 2027.</div></div>`;
+  }
+  // próximo hito
+  const hito=[
+    {d:"2026-11-18",t:"🔬 Test de 5K en cinta"},
+    {d:"2027-01-06",t:"🔬 Test de 10K — checkpoint del objetivo"},
+    {d:"2027-02-07",t:"🏁 Tune-up: 10K a ritmo de competición"},
+    {d:"2027-03-14",t:"🏁 MEDIA MARATÓN — objetivo 1:50:00"}
+  ].find(x=>x.d>=TODAY);
+  if(hito){
+    h+=`<div class="card"><h3>Próximo hito</h3><div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+      <span class="big">${hito.t}</span>
+      <span class="tiny">${Math.round((parse(hito.d)-parse(TODAY))/864e5)} días</span></div></div>`;
+  }
+  document.getElementById("v-hoy").innerHTML=h;
+}
+
+/* =========================================================
+   RENDER · PREVENCIÓN
+   ========================================================= */
+function renderPre(){
+  document.getElementById("v-pre").innerHTML=`
+  <div class="card">
+    <h3>🚦 Semáforo de dolor</h3>
+    <div class="muted" style="margin-bottom:10px">Evalúa el dolor tibial <b>al terminar</b>, <b>2 h después</b> y <b>al día siguiente</b>.</div>
+    <div class="acc" style="border-color:#22c55e"><b>🟢 Verde · 0-2 / 10</b>
+      <span class="muted">Molestia difusa que desaparece al calentar y no deja secuelas. → Entrena normal.</span></div>
+    <div class="acc" style="border-color:#eab308"><b>🟡 Amarillo · 3-4 / 10</b>
+      <span class="muted">Aparece a mitad de sesión y no persiste al día siguiente. → <b>Reduce el volumen un 30 %.</b> Sin intervalos. Revisa en 48 h.</span></div>
+    <div class="acc" style="border-color:#f97316"><b>🟠 Naranja · 5-6 / 10</b>
+      <span class="muted">Dolor difuso (zona &gt; 5 cm) que persiste al día siguiente o al caminar. → <b>Para la carrera.</b> Sustituye por bici. 5-7 días mínimo.</span></div>
+    <div class="acc" style="border-color:#ef4444"><b>🔴 Rojo · &gt;6 / 10 o dolor focal</b>
+      <span class="muted">Dolor puntual (&lt; 2 cm), nocturno, al levantarte, o cojera. → <b>PARA y consulta a un médico del deporte.</b></span></div>
+  </div>
+
+  <div class="card">
+    <h3>⚠️ Las 4 señales que separan molestia de lesión</h3>
+    <ul class="clean">
+      <li><b>Dolor focal</b> — puedes señalarlo con un dedo, no es difuso.</li>
+      <li><b>No calienta</b> con el movimiento, o empeora mientras corres.</li>
+      <li><b>Dolor en reposo</b> o por la noche.</li>
+      <li><b>Empeora al día siguiente</b> de forma repetida.</li>
+    </ul>
+    <div class="note warn" style="margin:12px 0 0">Cualquiera de estas cuatro = nivel naranja o rojo. No lo negocies contigo mismo.</div>
+  </div>
+
+  <div class="card">
+    <h3>📈 Reglas de carga</h3>
+    <div class="acc"><b>ACWR = km de esta semana ÷ media de las 4 anteriores</b>
+      <span class="muted">0,8 – 1,3 ✅ zona segura · 1,3 – 1,5 ⚠️ riesgo · &gt; 1,5 🔴 lesión</span></div>
+    <ul class="clean">
+      <li><b>+8 % máximo</b> de volumen semanal.</li>
+      <li><b>Descarga cada 3-4 semanas</b> (−25-30 %).</li>
+      <li>La <b>tirada larga</b> nunca crece más de 1,5 km.</li>
+      <li><b>Nunca</b> subir volumen + intensidad la misma semana.</li>
+      <li>Tras una semana perdida, vuelve al volumen de <b>2 semanas atrás</b>.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>🦵 Rutina tibial / sóleo</h3>
+    <div class="muted" style="margin-bottom:8px">8-10 min · 3-4×/semana · <b>nunca justo antes de correr</b>.</div>
+    <table>
+      <tr><th>Ejercicio</th><th>Dosis</th></tr>
+      <tr><td>1 · Isométrico de sóleo en pared</td><td>3×45 s</td></tr>
+      <tr><td>2 · Elevación de talón excéntrica, rodilla flexionada</td><td>3×12 / pierna</td></tr>
+      <tr><td>3 · Inversión con banda (tibial posterior)</td><td>3×15 / pierna</td></tr>
+      <tr><td>4 · Elevación de puntas con banda (tibial anterior)</td><td>3×15</td></tr>
+      <tr><td>5 · Dorsiflexión de tobillo contra la pared</td><td>3×30 s / pierna</td></tr>
+      <tr><td>6 · Autoliberación plantar con pelota</td><td>60 s / pie</td></tr>
+      <tr><td>7 · Pogo hops (desde S9)</td><td>3×20 s</td></tr>
+    </table>
+    <div class="note" style="margin:12px 0 0"><b>Progresión:</b> S1-S4 → 1, 3, 5, 6 · S5-S8 → +2, +4 · S9+ → +7</div>
+  </div>
+
+  <div class="card">
+    <h3>👟 Cadencia · superficie · calzado</h3>
+    <ul class="clean">
+      <li><b>Cadencia 172-178 ppm</b> en rodajes fáciles. Cuenta 30 s y multiplica por 2.</li>
+      <li>Sube <b>+3-5 ppm cada 2 semanas</b>. Drill: 4×30 s a cadencia exagerada.</li>
+      <li><b>Preferir:</b> cinta, tierra/grava compactada, asfalto liso. <b>Evitar:</b> hormigón, adoquín, trail irregular.</li>
+      <li><b>Sin series cuesta abajo</b> durante las primeras 16 semanas.</li>
+      <li><b>2 pares de zapatillas en rotación</b>, alternate cada sesión.</li>
+      <li><b>Nada de placa de carbono</b> hasta S17. Recambio a los 600-700 km.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>🍽️ Nutrición y sueño para el hueso</h3>
+    <table>
+      <tr><th>Factor</th><th>Dosis</th></tr>
+      <tr><td>Calcio</td><td>1.000-1.200 mg/día (dieta)</td></tr>
+      <tr><td>Vitamina D</td><td>1.000-2.000 UI/día (oct-mar)</td></tr>
+      <tr><td>Colágeno + vit C</td><td>15 g + 40 mg, 45-60 min pre-carga</td></tr>
+      <tr><td>Proteína</td><td>1,6-1,8 g/kg → 125-140 g/día</td></tr>
+      <tr><td>Energía</td><td>Sin déficit agresivo</td></tr>
+      <tr><td>Sueño</td><td>7-9 h (objetivo 8)</td></tr>
+    </table>
+    <div class="note" style="margin:12px 0 0">El déficit energético es el <b>factor nº 1</b> de lesión ósea. Si quieres bajar grasa, despacio y solo en fases 1-2.</div>
+  </div>
+
+  <div class="card">
+    <h3>🚑 Cuándo consultar a un médico</h3>
+    <ul class="clean">
+      <li>Dolor que puedes señalar <b>con un dedo</b> en el borde de la tibia.</li>
+      <li>Dolor que <b>no desaparece en reposo</b>.</li>
+      <li>Dolor <b>nocturno</b> que te despierta.</li>
+      <li><b>Cojera</b> o dolor al subir escaleras.</li>
+      <li>Zona dolorosa de <b>menos de 2 cm</b>.</li>
+    </ul>
+    <div class="note warn" style="margin:12px 0 0">Entre periostitis y fractura por estrés hay un espectro continuo. Reconocerla a tiempo cuesta una semana; ignorarla cuesta media temporada.</div>
+  </div>
+
+  <div class="card">
+    <h3>🔁 Cross-training como descarga</h3>
+    <div class="muted" style="margin-bottom:6px">Si la tibia está sensible, <b>no paras: cambias de medio</b>.</div>
+    <table>
+      <tr><th>Sustitución</th><th>Equivalencia</th></tr>
+      <tr><td>1 km corriendo</td><td>≈ 3-4 min de bici</td></tr>
+      <tr><td>1 km corriendo</td><td>≈ 4-5 min de cinta inclinada</td></tr>
+      <tr><td>30 min bici Z2</td><td>≈ 8-9 km de rodaje</td></tr>
+    </table>
+  </div>`;
+}
+
+/* =========================================================
+   RENDER · REGISTRO
+   ========================================================= */
+function renderReg(){
+  const opts=W.map(w=>`<option value="${w.n}">S${w.n} · ${dateRange(w.s)}</option>`).join("");
+  document.getElementById("v-reg").innerHTML=`
+  <div class="card">
+    <h3>📊 Calculadora de ACWR</h3>
+    <div class="muted" style="margin-bottom:10px">Rellena los km de las últimas 4 semanas. Te dice si puedes subir.</div>
+    <div class="grid2">
+      <div class="fld"><label>Semana −4</label><input id="a1" type="number" inputmode="decimal" placeholder="km"></div>
+      <div class="fld"><label>Semana −3</label><input id="a2" type="number" inputmode="decimal" placeholder="km"></div>
+      <div class="fld"><label>Semana −2</label><input id="a3" type="number" inputmode="decimal" placeholder="km"></div>
+      <div class="fld"><label>Semana −1</label><input id="a4" type="number" inputmode="decimal" placeholder="km"></div>
+    </div>
+    <div class="fld"><label>Semana actual</label><input id="ac" type="number" inputmode="decimal" placeholder="km"></div>
+    <button id="calc" style="width:100%;padding:13px;border-radius:12px;background:var(--acc);color:#04212b;font-weight:800">Calcular ACWR</button>
+    <div id="acwrOut" style="margin-top:14px;text-align:center;color:var(--tx3)">—</div>
+    <div id="acwrMsg" class="tiny" style="text-align:center;margin-top:4px"></div>
+  </div>
+
+  <div class="card">
+    <h3>📝 Cierre de semana</h3>
+    <div class="fld"><label>Semana</label><select id="lw">${opts}</select></div>
+    <div class="grid2">
+      <div class="fld"><label>Km totales</label><input id="lkm" type="number" inputmode="decimal"></div>
+      <div class="fld"><label>Dolor máx (0-10)</label><input id="ldol" type="number" inputmode="numeric"></div>
+      <div class="fld"><label>Cadencia (ppm)</label><input id="lcad" type="number" inputmode="numeric"></div>
+      <div class="fld"><label>Sueño medio (h)</label><input id="lsue" type="number" inputmode="decimal" step="0.1"></div>
+      <div class="fld"><label>Palpación tibia D (cm)</label><input id="lpd" type="number" inputmode="decimal" step="0.5"></div>
+      <div class="fld"><label>Palpación tibia I (cm)</label><input id="lpi" type="number" inputmode="decimal" step="0.5"></div>
+    </div>
+    <div class="fld"><label>Notas</label><input id="lno" type="text" placeholder="Cómo ha ido la semana"></div>
+    <button id="saveLog" style="width:100%;padding:13px;border-radius:12px;background:var(--bg3);font-weight:800;border:1px solid var(--line)">Guardar semana</button>
+    <div id="logMsg" class="tiny" style="text-align:center;margin-top:8px"></div>
+  </div>
+
+  <div class="card">
+    <h3>📚 Historial</h3>
+    <div id="hist" class="muted">Sin registros todavía.</div>
+  </div>
+
+  <div class="card">
+    <h3>⚙️ Datos</h3>
+    <div class="tiny" style="margin-bottom:10px">Todo se guarda solo en este dispositivo (localStorage). Nada sale de tu iPhone.</div>
+    <button id="reset" style="width:100%;padding:12px;border-radius:12px;background:rgba(239,68,68,.12);color:#fca5a5;font-weight:700;border:1px solid rgba(239,68,68,.3)">Borrar todo el progreso</button>
+  </div>`;
+
+  // ACWR
+  const calc=()=>{
+    const v=[1,2,3,4].map(i=>parseFloat(document.getElementById("a"+i).value)).filter(x=>!isNaN(x));
+    const cur=parseFloat(document.getElementById("ac").value);
+    const out=document.getElementById("acwrOut"), msg=document.getElementById("acwrMsg");
+    if(v.length<1||isNaN(cur)){out.textContent="—";out.style.color="var(--tx3)";msg.textContent="";return;}
+    const avg=v.reduce((a,b)=>a+b,0)/v.length;
+    if(avg===0){out.textContent="—";msg.textContent="Las semanas previas no pueden ser 0.";return;}
+    const r=cur/avg;
+    out.textContent=r.toFixed(2);
+    let c,t;
+    if(r<0.8){c="#60a5fa";t="Infraentrenamiento. Puedes subir.";}
+    else if(r<=1.3){c="#22c55e";t="Zona segura. Adelante.";}
+    else if(r<=1.5){c="#eab308";t="Riesgo elevado. NO subas esta semana.";}
+    else{c="#ef4444";t="Zona de lesión. Repite o baja el volumen.";}
+    out.style.color=c; msg.innerHTML=`<span style="color:${c};font-weight:700">${t}</span>`;
+    const wk=document.getElementById("lw");
+    if(wk) wk.dataset.acwr=r.toFixed(2);
+  };
+  ["a1","a2","a3","a4","ac"].forEach(id=>document.getElementById(id).addEventListener("input",calc));
+  document.getElementById("calc").addEventListener("click",calc);
+
+  // log
+  const sel=document.getElementById("lw");
+  const fill=n=>{
+    const L=S.log[n]||{};
+    document.getElementById("lkm").value=L.km??"";
+    document.getElementById("ldol").value=L.dol??"";
+    document.getElementById("lcad").value=L.cad??"";
+    document.getElementById("lsue").value=L.sue??"";
+    document.getElementById("lpd").value=L.pd??"";
+    document.getElementById("lpi").value=L.pi??"";
+    document.getElementById("lno").value=L.no??"";
+  };
+  sel.addEventListener("change",()=>fill(sel.value));
+  const cur=W.find(w=>w.s<=TODAY && TODAY<=weekEnd(w)) || W[0];
+  sel.value=cur.n; fill(cur.n);
+
+  document.getElementById("saveLog").addEventListener("click",()=>{
+    const n=sel.value;
+    S.log[n]={
+      km:document.getElementById("lkm").value,
+      dol:document.getElementById("ldol").value,
+      cad:document.getElementById("lcad").value,
+      sue:document.getElementById("lsue").value,
+      pd:document.getElementById("lpd").value,
+      pi:document.getElementById("lpi").value,
+      no:document.getElementById("lno").value,
+      acwr:sel.dataset.acwr||""
+    };
+    save();
+    document.getElementById("logMsg").innerHTML='<span style="color:#22c55e;font-weight:700">✓ Guardado</span>';
+    hist();
+    setTimeout(()=>document.getElementById("logMsg").textContent="",1800);
+  });
+
+  document.getElementById("reset").addEventListener("click",()=>{
+    if(confirm("¿Borrar todo el progreso y los registros? No se puede deshacer.")){
+      S={done:{},log:{}}; save(); location.reload();
+    }
+  });
+
+  hist();
+}
+
+function hist(){
+  const rows=Object.keys(S.log).map(Number).sort((a,b)=>a-b)
+    .filter(n=>Object.values(S.log[n]).some(v=>v!==""))
+    .map(n=>{
+      const L=S.log[n];
+      return `<tr><td><b>S${n}</b></td><td>${L.km||"—"} km</td><td>${L.dol!==""&&L.dol!=null?L.dol:"—"}/10</td><td>${L.cad||"—"}</td><td>${L.pd||"—"}/${L.pi||"—"}</td><td>${L.acwr||"—"}</td></tr>`;
+    });
+  document.getElementById("hist").innerHTML = rows.length
+    ? `<table><tr><th>Sem</th><th>Km</th><th>Dolor</th><th>Cad</th><th>Palp</th><th>ACWR</th></tr>${rows.join("")}</table>`
+    : "Sin registros todavía.";
+}
+
+/* =========================================================
+   INTERACCIÓN
+   ========================================================= */
+function attach(){
+  document.querySelectorAll("nav button").forEach(b=>{
+    b.addEventListener("click",()=>{
+      document.querySelectorAll("nav button").forEach(x=>x.classList.remove("on"));
+      document.querySelectorAll(".view").forEach(x=>x.classList.remove("on"));
+      b.classList.add("on");
+      document.getElementById("v-"+b.dataset.v).classList.add("on");
+      document.querySelector("main").scrollTop=0;
+    });
+  });
+}
+
+/* Delegación global: actualiza en sitio, sin re-render */
+document.body.addEventListener("click",e=>{
+  const h=e.target.closest(".wk-h");
+  if(h && h.parentElement && h.parentElement.classList.contains("wk")){
+    h.parentElement.classList.toggle("open");
+    return;
+  }
+  const d=e.target.closest(".d[data-k]");
+  if(!d || d.classList.contains("d-lock")) return;
+  const k=d.dataset.k;
+  const wn=parseInt(k.split("-")[0],10);
+  if(S.done[k]) delete S.done[k]; else S.done[k]=true;
+  save();
+  document.querySelectorAll('.d[data-k="'+k+'"]').forEach(x=>x.classList.toggle("ck",!!S.done[k]));
+  const w=W.find(x=>x.n===wn);
+  if(w){
+    const dn=weekDone(w), tot=weekTotal(w);
+    const card=document.querySelector('.wk[data-w="'+wn+'"]');
+    if(card){
+      card.classList.toggle("done", tot>0 && dn===tot);
+      const s=card.querySelector(".wk-s");
+      if(s) s.textContent=dateRange(w.s)+" · "+dn+"/"+tot+" sesiones"+(w.test?" · 🔬 TEST":"")+(w.race?" · 🏁":"");
+    }
+  }
+  upd();
+});
+
+function upd(){
+  let tot=0,dn=0;
+  W.forEach(w=>{ tot+=weekTotal(w); dn+=weekDone(w); });
+  const p=tot?Math.round(dn/tot*100):0;
+  document.getElementById("pbar").style.width=p+"%";
+  document.getElementById("pTxt").textContent=p+" % completado";
+  document.getElementById("pSes").textContent=dn+"/"+tot+" sesiones";
+}
+
+/* =========================================================
+   GO
+   ========================================================= */
+renderPlan(); renderHoy(); renderPre(); renderReg();
+attach(); upd();
+</script>
+</body>
+</html>
