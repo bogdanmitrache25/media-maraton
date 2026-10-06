@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -44,6 +44,17 @@ export function AuthForm({ next }: { next: string }) {
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /*
+   * Hasta que React no hidrata, el formulario no tiene manejadores y el
+   * navegador lo enviaría de forma nativa. Como el método por defecto es GET,
+   * la contraseña acabaría escrita en la barra de direcciones, en el historial
+   * y en los registros del servidor. Dos defensas: `method="post"` para que los
+   * datos viajen en el cuerpo y nunca en la URL, y el botón deshabilitado hasta
+   * que la página está viva.
+   */
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => setHydrated(true), []);
 
   const isSignup = mode === 'signup';
 
@@ -124,7 +135,7 @@ export function AuthForm({ next }: { next: string }) {
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} noValidate style={{ marginTop: 22 }}>
+      <form onSubmit={handleSubmit} method="post" noValidate style={{ marginTop: 22 }}>
         {error && (
           <div className="alert" role="alert">
             {error}
@@ -195,7 +206,7 @@ export function AuthForm({ next }: { next: string }) {
           </div>
         )}
 
-        <button className="btn btn-solid" type="submit" disabled={loading}>
+        <button className="btn btn-solid" type="submit" disabled={loading || !hydrated}>
           {loading ? 'Un momento…' : isSignup ? 'Crear mi cuenta' : 'Entrar'}
         </button>
       </form>

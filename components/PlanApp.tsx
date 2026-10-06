@@ -1,10 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { resetMyProgress, saveWeeklyLog, toggleSession } from '@/app/plan/actions';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  clearSessionOverride,
+  resetMyProgress,
+  saveSessionOverride,
+  saveWeeklyLog,
+  toggleSession,
+} from '@/app/plan/actions';
 import { PreventionTab } from '@/components/PreventionTab';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import type { ThemeChoice } from '@/lib/theme';
+import { buildTrainingReport } from '@/lib/export';
 import {
   DAY_NAMES,
   PHASES,
@@ -31,10 +38,27 @@ export interface LogRow {
   notes: string | null;
 }
 
+export interface OverrideRow {
+  week: number;
+  day: number;
+  title: string;
+  note: string | null;
+}
+
+/** Una sesión del plan tal y como se le muestra al atleta, ya con su sustitución aplicada. */
+export interface ResolvedDay {
+  type: SessionType;
+  title: string;
+  desc: string;
+  /** Título original del plan cuando la sesión ha sido sustituida. `null` si no lo está. */
+  overridden: string | null;
+}
+
 interface Props {
   user: { name: string; email: string; avatarUrl: string | null };
   initialDone: string[];
   initialLogs: LogRow[];
+  initialOverrides: OverrideRow[];
   serverToday: string;
   theme?: ThemeChoice;
 }
@@ -78,7 +102,14 @@ const rangeShort = (iso: string) =>
     .replace(/\./g, '')
     .toUpperCase();
 
-export function PlanApp({ user, initialDone, initialLogs, serverToday, theme }: Props) {
+export function PlanApp({
+  user,
+  initialDone,
+  initialLogs,
+  initialOverrides,
+  serverToday,
+  theme,
+}: Props) {
   const [tab, setTab] = useState<Tab>('hoy');
   const [today, setToday] = useState(serverToday);
   const [done, setDone] = useState<Set<string>>(() => new Set(initialDone));
@@ -87,8 +118,20 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday, theme }: 
     for (const log of initialLogs) map[log.week] = log;
     return map;
   });
+  const [overrides, setOverrides] = useState<Record<string, OverrideRow>>(() => {
+    const map: Record<string, OverrideRow> = {};
+    for (const o of initialOverrides) map[KEY(o.week, o.day)] = o;
+    return map;
+  });
   const [openWeeks, setOpenWeeks] = useState<Set<number>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ week: number; day: number } | null>(null);
+  /*
+   * Qué fila acaba de cambiar. La animación de marcado debe dispararse una sola
+   * vez, al pulsar, y no cada vez que la lista se vuelve a pintar: si no, al
+   * cargar la página se animarían de golpe las cincuenta filas ya hechas.
+   */
+  const [justMarked, setJustMarked] = useState<string | null>(null);
 
   useEffect(() => setToday(localToday()), []);
 
@@ -98,6 +141,18 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday, theme }: 
   }, []);
 
   /* ---------------------------------------------------------------- */
+
+  /** Aplica la sustitución del atleta encima de la sesión propuesta por el plan. */
+  const resolveDay = useCallback(
+    (w: Week, index: number): ResolvedDay => {
+      const base = w.days[index];
+      if (!base) return { type: 'R', title: '—', desc: '', overridden: null };
+      const over = overrides[KEY(w.n, index)];
+      if (!over) return { ...base, overridden: null };
+      return { type: base.type, title: over.title, desc: over.note ?? '', overridden: base.title };
+    },
+    [overrides],
+  );
 
   const progressOf = useCallback(
     (w: Week) => {
@@ -130,6 +185,9 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday, theme }: 
       const key = KEY(week, day);
       const wasDone = done.has(key);
 
+      setJustMarked(key);
+      window.setTimeout(() => setJustMarked((cur) => (cur === key ? null : cur)), 800);
+
       setDone((prev) => {
         const next = new Set(prev);
         if (wasDone) next.delete(key);
@@ -157,6 +215,75 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday, theme }: 
       }
     },
     [done, showToast],
+  );
+
+  /* ---------------------------------------------------------------- */
+
+  const handleSaveOverride = useCallback(
+    async (week: number, day: number, title: string, note: string | null) => {
+      const key = KEY(week, day);
+      const previous = overrides[key];
+
+      // Optimista: la hoja se cierra y la fila cambia al instante.
+      setOverrides((prev) => ({ ...prev, [key]: { week, day, title, note } }));
+      setEditing(null);
+
+      const rollback = () =>
+        setOverrides((prev) => {
+          const next = { ...prev };
+          if (previous) next[key] = previous;
+          else delete next[key];
+          return next;
+        });
+
+      try {
+        const res = await saveSessionOverride({ week, day, title, note });
+        if (!res.ok) {
+          rollback();
+          showToast(res.error);
+        } else {
+          showToast('Sesión sustituida');
+        }
+      } catch {
+        rollback();
+        showToast('Sin conexión. Inténtalo de nuevo.');
+      }
+    },
+    [overrides, showToast],
+  );
+
+  const handleClearOverride = useCallback(
+    async (week: number, day: number) => {
+      const key = KEY(week, day);
+      const previous = overrides[key];
+      if (!previous) return;
+
+      setOverrides((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setEditing(null);
+
+      try {
+        const res = await clearSessionOverride({ week, day });
+        if (!res.ok) {
+          setOverrides((prev) => ({ ...prev, [key]: previous }));
+          showToast(res.error);
+        } else {
+          showToast('Vuelve la sesión original');
+        }
+      } catch {
+        setOverrides((prev) => ({ ...prev, [key]: previous }));
+        showToast('Sin conexión. Inténtalo de nuevo.');
+      }
+    },
+    [overrides, showToast],
+  );
+
+  const report = useCallback(
+    () => buildTrainingReport({ name: user.name, today, done, overrides, logs }),
+    [user.name, today, done, overrides, logs],
   );
 
   /* ---------------------------------------------------------------- */
@@ -195,6 +322,7 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday, theme }: 
                     .filter(Boolean)
                     .join(' ')}
                   title={`Semana ${w.n} · ${complete}/${total}`}
+                  data-flash={justMarked?.startsWith(`${w.n}:`) && pct >= 100 ? '1' : undefined}
                 >
                   <div className="bar-track">
                     <div className="bar-fill" style={{ height: `${pct}%` }} />
@@ -220,6 +348,9 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday, theme }: 
             done={done}
             onToggle={handleToggle}
             progressOf={progressOf}
+            resolveDay={resolveDay}
+            onEdit={(week, day) => setEditing({ week, day })}
+            justMarked={justMarked}
           />
         </section>
 
@@ -231,6 +362,9 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday, theme }: 
             setOpenWeeks={setOpenWeeks}
             progressOf={progressOf}
             onToggle={handleToggle}
+            resolveDay={resolveDay}
+            onEdit={(week, day) => setEditing({ week, day })}
+            justMarked={justMarked}
           />
         </section>
 
@@ -239,7 +373,7 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday, theme }: 
         </section>
 
         <section className={`view ${tab === 'reg' ? 'on' : ''}`}>
-          <LogView today={today} logs={logs} setLogs={setLogs} showToast={showToast} />
+          <LogView today={today} logs={logs} setLogs={setLogs} showToast={showToast} report={report} />
         </section>
 
         <div className="sect">
@@ -261,6 +395,24 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday, theme }: 
         <TabButton id="pre" label="Protección" tab={tab} setTab={setTab} />
         <TabButton id="reg" label="Registro" tab={tab} setTab={setTab} />
       </nav>
+
+      {editing && (
+        <OverrideSheet
+          week={editing.week}
+          dayIndex={editing.day}
+          original={
+            WEEKS.find((w) => w.n === editing.week)?.days[editing.day] ?? {
+              type: 'R',
+              title: '—',
+              desc: '',
+            }
+          }
+          current={overrides[KEY(editing.week, editing.day)] ?? null}
+          onClose={() => setEditing(null)}
+          onSave={handleSaveOverride}
+          onClear={handleClearOverride}
+        />
+      )}
 
       <div className={`toast ${toast ? 'on' : ''}`} role="status" aria-live="polite">
         {toast}
@@ -306,11 +458,17 @@ function TodayView({
   done,
   onToggle,
   progressOf,
+  resolveDay,
+  onEdit,
+  justMarked,
 }: {
   today: string;
   done: Set<string>;
   onToggle: (w: number, d: number) => void;
   progressOf: (w: Week) => { total: number; complete: number };
+  resolveDay: (w: Week, index: number) => ResolvedDay;
+  onEdit: (week: number, day: number) => void;
+  justMarked: string | null;
 }) {
   const week = weekOfDate(today);
   const dayIndex = week ? dayIndexIn(week, today) : -1;
@@ -338,9 +496,9 @@ function TodayView({
   }
 
   const phase = PHASES[week.phase];
-  const session = week.days[dayIndex];
+  const session = resolveDay(week, dayIndex);
   const { total, complete } = progressOf(week);
-  const isDone = session ? done.has(KEY(week.n, dayIndex)) : false;
+  const isDone = done.has(KEY(week.n, dayIndex));
 
   const daysToMilestone = milestone
     ? Math.max(
@@ -360,8 +518,7 @@ function TodayView({
 
         {session ? (
           <>
-            <h2 className="hero-title">{session.title}</h2>
-            <div className="hero-meta">
+            <h2 className="hero-title">{session.title}</h2>            <div className="hero-meta">
               <span>
                 {DAY_NAMES[dayIndex]?.toUpperCase()} {rangeShort(today)}
               </span>
@@ -370,18 +527,33 @@ function TodayView({
             </div>
 
             {isCountable(session.type) ? (
-              <button
-                type="button"
-                className="hero-action"
-                aria-pressed={isDone}
-                onClick={() => onToggle(week.n, dayIndex)}
-              >
-                {isDone ? 'Hecha — desmarcar' : 'Marcar como hecha'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="hero-action"
+                  aria-pressed={isDone}
+                  onClick={() => onToggle(week.n, dayIndex)}
+                >
+                  <span className="hero-action-label">
+                    {isDone ? 'Hecha — desmarcar' : 'Marcar como hecha'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="hero-alt"
+                  onClick={() => onEdit(week.n, dayIndex)}
+                >
+                  {session.overridden ? 'Editar sustitución' : 'Sustituir por otra cosa'}
+                </button>
+              </>
             ) : (
               <p className="hero-note">
                 Día de descanso. Rutina tibial y de sóleo, 8-10 min.
               </p>
+            )}
+
+            {session.overridden && (
+              <p className="hero-swap">Sustituye a «{session.overridden}»</p>
             )}
 
             {session.desc && <p className="hero-note">{session.desc}</p>}
@@ -397,14 +569,16 @@ function TodayView({
           </span>
         </div>
         <div className="ledger">
-          {week.days.map((day, i) => (
+          {week.days.map((_, i) => (
             <DayRow
               key={i}
-              day={day}
+              day={resolveDay(week, i)}
               dayIndex={i}
               done={done.has(KEY(week.n, i))}
               isToday={i === dayIndex}
+              justMarked={justMarked === KEY(week.n, i)}
               onToggle={() => onToggle(week.n, i)}
+              onEdit={() => onEdit(week.n, i)}
             />
           ))}
         </div>
@@ -436,6 +610,9 @@ function PlanView({
   setOpenWeeks,
   progressOf,
   onToggle,
+  resolveDay,
+  onEdit,
+  justMarked,
 }: {
   today: string;
   done: Set<string>;
@@ -443,6 +620,9 @@ function PlanView({
   setOpenWeeks: (fn: (prev: Set<number>) => Set<number>) => void;
   progressOf: (w: Week) => { total: number; complete: number };
   onToggle: (w: number, d: number) => void;
+  resolveDay: (w: Week, index: number) => ResolvedDay;
+  onEdit: (week: number, day: number) => void;
+  justMarked: string | null;
 }) {
   const order = [1, 2, 3, 4, 5, 6] as const;
 
@@ -495,14 +675,16 @@ function PlanView({
                   <div className="week-b">
                     {w.note && <p className="week-note">{w.note}</p>}
                     <div className="ledger">
-                      {w.days.map((day, i) => (
+                      {w.days.map((_, i) => (
                         <DayRow
                           key={i}
-                          day={day}
+                          day={resolveDay(w, i)}
                           dayIndex={i}
                           done={done.has(KEY(w.n, i))}
                           isToday={dateOf(w.n, i) === today}
+                          justMarked={justMarked === KEY(w.n, i)}
                           onToggle={() => onToggle(w.n, i)}
+                          onEdit={() => onEdit(w.n, i)}
                         />
                       ))}
                     </div>
@@ -526,25 +708,34 @@ function DayRow({
   dayIndex,
   done,
   isToday,
+  justMarked,
   onToggle,
+  onEdit,
 }: {
-  day: { type: SessionType; title: string; desc: string };
+  day: ResolvedDay;
   dayIndex: number;
   done: boolean;
   isToday: boolean;
+  justMarked: boolean;
   onToggle: () => void;
+  onEdit: () => void;
 }) {
   const locked = !isCountable(day.type);
 
-  const inner = (
+  const body = (
     <>
       <span className="row-day">{DAY_NAMES[dayIndex]}</span>
       <span className="row-body">
-        <span className="row-code">{CODE[day.type]}</span>
+        <span className="row-code">
+          {CODE[day.type]}
+          {day.overridden && <span className="row-swap">· sustituida</span>}
+        </span>
         <span className="row-title">{day.title}</span>
         {day.desc && <span className="row-desc">{day.desc}</span>}
       </span>
-      <span className="row-mark">{done && <Tick />}</span>
+      <span className="row-mark">
+        <Tick />
+      </span>
     </>
   );
 
@@ -556,24 +747,39 @@ function DayRow({
         data-locked="1"
         data-today={isToday ? '1' : '0'}
       >
-        {inner}
+        <div className="row-toggle row-static">
+          {body}
+        </div>
       </div>
     );
   }
 
   return (
-    <button
-      type="button"
+    <div
       className="row"
       data-i={INTENSITY[day.type]}
       data-done={done ? '1' : '0'}
       data-today={isToday ? '1' : '0'}
-      aria-pressed={done}
-      aria-label={`${DAY_NAMES[dayIndex]}: ${day.title}`}
-      onClick={onToggle}
+      data-stamp={justMarked && done ? '1' : undefined}
     >
-      {inner}
-    </button>
+      <button
+        type="button"
+        className="row-toggle"
+        aria-pressed={done}
+        aria-label={`${DAY_NAMES[dayIndex]}: ${day.title}`}
+        onClick={onToggle}
+      >
+        {body}
+      </button>
+      <button
+        type="button"
+        className="row-edit"
+        aria-label={`Sustituir la sesión del ${DAY_NAMES[dayIndex]}`}
+        onClick={onEdit}
+      >
+        <span aria-hidden="true">···</span>
+      </button>
+    </div>
   );
 }
 
@@ -592,6 +798,143 @@ function Tick() {
 }
 
 /* ==================================================================== */
+/*  HOJA DE SUSTITUCIÓN                                                 */
+/* ==================================================================== */
+
+/** Sugerencias por tipo de sesión: un ejemplo concreto vale más que un campo vacío. */
+function placeholderFor(type: SessionType): string {
+  switch (type) {
+    case 'C':
+      return 'Ej. Natación 40 min, o elíptica suave';
+    case 'A':
+      return 'Ej. Bici Z2 60 min';
+    case 'B':
+      return 'Ej. Trote suave 25 min sin series';
+    case 'G':
+      return 'Ej. Pesas — pierna y core';
+    default:
+      return 'Ej. Lo que vayas a hacer';
+  }
+}
+
+function OverrideSheet({
+  week,
+  dayIndex,
+  original,
+  current,
+  onClose,
+  onSave,
+  onClear,
+}: {
+  week: number;
+  dayIndex: number;
+  original: { type: SessionType; title: string; desc: string };
+  current: OverrideRow | null;
+  onClose: () => void;
+  onSave: (week: number, day: number, title: string, note: string | null) => void;
+  onClear: (week: number, day: number) => void;
+}) {
+  const [title, setTitle] = useState(current?.title ?? '');
+  const [note, setNote] = useState(current?.note ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  // Escape cierra: es lo que espera cualquiera con un teclado delante.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const clean = title.trim();
+    if (!clean) {
+      setError('Escribe qué vas a hacer en su lugar.');
+      return;
+    }
+    if (clean.length > 80) {
+      setError('El título no puede pasar de 80 caracteres.');
+      return;
+    }
+    const cleanNote = note.trim();
+    onSave(week, dayIndex, clean, cleanNote === '' ? null : cleanNote);
+  }
+
+  return (
+    <div className="sheet-wrap">
+      <div className="sheet-scrim" onClick={onClose} />
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="Sustituir sesión">
+        <div className="sheet-grip" aria-hidden="true" />
+
+        <p className="eyebrow">
+          S{String(week).padStart(2, '0')} · {DAY_NAMES[dayIndex]?.toUpperCase()} · SUSTITUIR
+        </p>
+
+        <p className="sheet-original">
+          En el plan tocaba <b>{original.title}</b>
+        </p>
+
+        <form onSubmit={submit}>
+          {error && (
+            <div className="alert" role="alert">
+              {error}
+            </div>
+          )}
+
+          <div className="field">
+            <label htmlFor="ov-title">Qué vas a hacer en su lugar</label>
+            <input
+              id="ov-title"
+              className="input"
+              type="text"
+              maxLength={80}
+              autoComplete="off"
+              placeholder={placeholderFor(original.type)}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="ov-note">Nota (opcional)</label>
+            <input
+              id="ov-note"
+              className="input"
+              type="text"
+              maxLength={300}
+              autoComplete="off"
+              placeholder="Cómo te sentiste, por qué el cambio…"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+
+          <div className="sheet-actions">
+            <button className="btn btn-solid" type="submit">
+              Guardar
+            </button>
+            {current && (
+              <button
+                className="btn btn-danger"
+                type="button"
+                onClick={() => onClear(week, dayIndex)}
+              >
+                Volver a la original
+              </button>
+            )}
+            <button className="btn" type="button" onClick={onClose}>
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ==================================================================== */
 /*  REGISTRO                                                            */
 /* ==================================================================== */
 
@@ -600,11 +943,13 @@ function LogView({
   logs,
   setLogs,
   showToast,
+  report,
 }: {
   today: string;
   logs: Record<number, LogRow>;
   setLogs: (fn: (prev: Record<number, LogRow>) => Record<number, LogRow>) => void;
   showToast: (m: string) => void;
+  report: () => string;
 }) {
   const [week, setWeek] = useState(() => weekOfDate(today)?.n ?? 1);
   const [saving, setSaving] = useState(false);
@@ -612,6 +957,8 @@ function LogView({
 
   const [calc, setCalc] = useState({ w1: '', w2: '', w3: '', w4: '', cur: '' });
   const [result, setResult] = useState<{ v: number; label: string; color: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const reportRef = useRef<HTMLDetailsElement>(null);
 
   function computeAcwr() {
     const nums = [calc.w1, calc.w2, calc.w3, calc.w4]
@@ -693,6 +1040,35 @@ function LogView({
 
   const history = Object.values(logs).sort((a, b) => a.week - b.week);
 
+  async function copyReport() {
+    try {
+      await navigator.clipboard.writeText(report());
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Sin permiso de portapapeles —Safari es estricto— no dejamos al atleta
+      // buscando: abrimos el informe y lo traemos a la vista.
+      const box = reportRef.current;
+      if (box) {
+        box.open = true;
+        box.scrollIntoView({ block: 'center' });
+      }
+      showToast('Cópialo a mano: el navegador no deja copiar solo.');
+    }
+  }
+
+  function downloadReport() {
+    const blob = new Blob([report()], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `entreno-media-maraton-${today}.md`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <>
       <div className="sect">
@@ -770,6 +1146,10 @@ function LogView({
 
       <div className="sect">
         <p className="eyebrow">Cierre de semana</p>
+        {/*
+          Sin `method`: cuando la acción es una función, React gestiona el envío
+          por su cuenta y avisa si se le fuerza uno.
+        */}
         <form action={submit} key={week} style={{ marginTop: 16 }}>
           <Field label="Semana">
             <select
@@ -855,6 +1235,26 @@ function LogView({
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="sect">
+        <p className="eyebrow">Exportar para tu IA</p>
+        <p className="dim" style={{ fontSize: 13, margin: '10px 0 16px', maxWidth: '38ch' }}>
+          Un informe en Markdown con tu plan, lo que llevas hecho, tus registros y las reglas del
+          protocolo. Se lo pegas a tu IA y ya sabe de qué hablas.
+        </p>
+
+        <button className="btn btn-solid" type="button" onClick={copyReport}>
+          {copied ? 'Copiado' : 'Copiar informe'}
+        </button>
+        <button className="btn" type="button" onClick={downloadReport} style={{ marginTop: 10 }}>
+          Descargar .md
+        </button>
+
+        <details className="pre-wrap" ref={reportRef}>
+          <summary>Ver el informe</summary>
+          <pre className="pre">{report()}</pre>
+        </details>
       </div>
 
       <div className="sect">

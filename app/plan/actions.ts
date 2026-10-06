@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClientWithUser } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/rate-limit';
-import { toNumberOrNull, toggleSessionSchema, weeklyLogSchema } from '@/lib/validation';
+import { toNumberOrNull, clearOverrideSchema, sessionOverrideSchema, toggleSessionSchema, weeklyLogSchema } from '@/lib/validation';
 import { isCountable, WEEKS } from '@/lib/plan-data';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -27,12 +27,8 @@ export async function toggleSession(input: unknown): Promise<ActionResult> {
 
   // 3. Coherencia de negocio: la sesión tiene que existir de verdad y ser
   //    marcable. Sin esto, alguien podría inventarse semanas o marcar descansos.
-  const targetWeek = WEEKS.find((w) => w.n === week);
-  const targetDay = targetWeek?.days[day];
-  if (!targetWeek || !targetDay) return { ok: false, error: 'Esa sesión no existe.' };
-  if (!isCountable(targetDay.type)) {
-    return { ok: false, error: 'Los días de descanso no se marcan.' };
-  }
+  const check = checkSession(week, day, 'marcan');
+  if (!check.ok) return { ok: false, error: check.error };
 
   // 4. Límite de peticiones por usuario.
   if (!(await rateLimit(`sync:${user.id}`, 240, 60))) {
@@ -128,6 +124,91 @@ export async function saveWeeklyLog(formData: FormData): Promise<ActionResult> {
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Sustituir una sesión por lo que el atleta haga realmente                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Comprueba que la sesión exista y que sea accionable.
+ *
+ * Una semana o un día inventados por un cliente manipulado no deben llegar a
+ * la base de datos, y los descansos no son ni marcables ni sustituibles. El
+ * verbo entra como parámetro para que el mensaje diga lo que toca.
+ */
+type SessionCheck = { ok: true } | { ok: false; error: string };
+
+function checkSession(week: number, day: number, verb: string): SessionCheck {
+  const targetWeek = WEEKS.find((w) => w.n === week);
+  const targetDay = targetWeek?.days[day];
+  if (!targetWeek || !targetDay) return { ok: false, error: 'Esa sesión no existe.' };
+  if (!isCountable(targetDay.type)) {
+    return { ok: false, error: `Los días de descanso no se ${verb}.` };
+  }
+  return { ok: true };
+}
+
+export async function saveSessionOverride(input: unknown): Promise<ActionResult> {
+  const { supabase, user } = await createClientWithUser();
+  if (!user) return { ok: false, error: 'Tu sesión ha caducado. Vuelve a entrar.' };
+
+  const parsed = sessionOverrideSchema.safeParse(input);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return { ok: false, error: first ? first.message : 'Datos no válidos.' };
+  }
+  const { week, day, title, note } = parsed.data;
+
+  const check = checkSession(week, day, 'sustituyen');
+  if (!check.ok) return { ok: false, error: check.error };
+
+  if (!(await rateLimit(`override:${user.id}`, 120, 60))) {
+    return { ok: false, error: RATE_LIMIT_ERROR };
+  }
+
+  const { error } = await supabase
+    .from('session_overrides')
+    .upsert(
+      { user_id: user.id, week, day, title, note },
+      { onConflict: 'user_id,week,day' },
+    );
+
+  if (error) {
+    console.error('[saveSessionOverride]', error.message);
+    return { ok: false, error: GENERIC_ERROR };
+  }
+
+  revalidatePath('/plan');
+  return { ok: true };
+}
+
+export async function clearSessionOverride(input: unknown): Promise<ActionResult> {
+  const { supabase, user } = await createClientWithUser();
+  if (!user) return { ok: false, error: 'Tu sesión ha caducado. Vuelve a entrar.' };
+
+  const parsed = clearOverrideSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Datos no válidos.' };
+  const { week, day } = parsed.data;
+
+  if (!(await rateLimit(`override:${user.id}`, 120, 60))) {
+    return { ok: false, error: RATE_LIMIT_ERROR };
+  }
+
+  const { error } = await supabase
+    .from('session_overrides')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('week', week)
+    .eq('day', day);
+
+  if (error) {
+    console.error('[clearSessionOverride]', error.message);
+    return { ok: false, error: GENERIC_ERROR };
+  }
+
+  revalidatePath('/plan');
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
 /*  Borrar el progreso del usuario                                            */
 /* -------------------------------------------------------------------------- */
 
@@ -141,13 +222,19 @@ export async function resetMyProgress(): Promise<ActionResult> {
 
   // Borramos por `user_id` explícito. Aunque RLS ya lo impediría, así el
   // borrado masivo es auditable y no depende de una condición implícita.
-  const [sessions, logs] = await Promise.all([
+  const [sessions, logs, overrides] = await Promise.all([
     supabase.from('session_completions').delete().eq('user_id', user.id),
     supabase.from('weekly_logs').delete().eq('user_id', user.id),
+    supabase.from('session_overrides').delete().eq('user_id', user.id),
   ]);
 
-  if (sessions.error || logs.error) {
-    console.error('[resetMyProgress]', sessions.error?.message, logs.error?.message);
+  if (sessions.error || logs.error || overrides.error) {
+    console.error(
+      '[resetMyProgress]',
+      sessions.error?.message,
+      logs.error?.message,
+      overrides.error?.message,
+    );
     return { ok: false, error: GENERIC_ERROR };
   }
 

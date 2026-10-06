@@ -32,6 +32,8 @@
   --done: #3f5b3a;
   --warn: #96660f;
   --alert: #a32314;
+  /* Qué tinta se lee encima del color de señal: blanco sobre el óxido oscuro. */
+  --on-signal: #ffffff;
 
   --gutter: 20px;
   --radius: 2px;
@@ -59,6 +61,8 @@ html[data-theme='dark'] {
   --done: #7fa86f;
   --warn: #d9a733;
   --alert: #e4503a;
+  /* Sobre el naranja vivo de la tinta, el blanco no llega a AA: va tinta. */
+  --on-signal: #17140f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -77,6 +81,7 @@ html[data-theme='dark'] {
     --done: #7fa86f;
     --warn: #d9a733;
     --alert: #e4503a;
+    --on-signal: #17140f;
   }
 }
 
@@ -307,6 +312,27 @@ a {
   margin-left: 7px;
 }
 
+/*
+ * Cuando marcar una sesión cierra la semana, la barra aterriza: un pequeño
+ * rebote vertical que premia el esfuerzo sin recurrir a confeti.
+ */
+@keyframes settle {
+  0% {
+    transform: scaleY(0.82);
+  }
+  60% {
+    transform: scaleY(1.06);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+.bar[data-flash='1'] .bar-fill {
+  transform-origin: bottom center;
+  animation: settle 0.6s var(--ease);
+}
+
 .strip-legend {
   display: flex;
   justify-content: space-between;
@@ -432,11 +458,13 @@ a {
 }
 
 .hero-action {
+  position: relative;
   display: grid;
   place-items: center;
   width: 100%;
   min-height: 52px;
   margin-top: 16px;
+  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--paper) 34%, transparent);
   border-radius: var(--radius);
   font-family: var(--font-mono), ui-monospace, monospace;
@@ -445,15 +473,59 @@ a {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--paper);
-  transition:
-    background 0.15s var(--ease),
-    color 0.15s var(--ease);
+}
+
+/* El relleno entra barriendo desde la izquierda, no encendiéndose de golpe. */
+.hero-action::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--signal);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.3s var(--ease);
+}
+
+.hero-action-label {
+  position: relative;
+  z-index: 1;
 }
 
 .hero-action[aria-pressed='true'] {
-  background: var(--signal);
   border-color: var(--signal);
-  color: #fff;
+  color: var(--on-signal);
+}
+
+.hero-action[aria-pressed='true']::after {
+  transform: scaleX(1);
+}
+
+.hero-alt {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 10px 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: center;
+  color: color-mix(in srgb, var(--paper) 68%, transparent);
+  transition: color 0.15s var(--ease);
+}
+
+.hero-alt:hover,
+.hero-alt:active {
+  color: var(--paper);
+}
+
+.hero-swap {
+  margin-top: 12px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--paper) 78%, transparent);
 }
 
 .hero-note {
@@ -471,17 +543,54 @@ a {
 .row {
   position: relative;
   display: grid;
+  grid-template-columns: 1fr 44px;
+  align-items: stretch;
+  border-top: 1px solid var(--rule);
+}
+
+/*
+ * La fila es un div que contiene dos botones, no un botón con otro dentro: los
+ * elementos interactivos anidados son HTML inválido y rompen el teclado.
+ * El control de sustitución ocupa 44 px, el ancho mínimo tocable.
+ */
+.row-toggle {
+  display: grid;
   grid-template-columns: 32px 1fr 30px;
   gap: 10px;
   align-items: center;
-  width: 100%;
   min-height: 60px;
   padding: 13px 0 13px 12px;
-  border-top: 1px solid var(--rule);
+  width: 100%;
   text-align: left;
-  background: none;
+  color: inherit;
 }
 
+.row-static {
+  grid-column: 1 / -1;
+}
+
+.row-edit {
+  display: grid;
+  place-items: center;
+  min-height: 60px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  color: var(--rule-strong);
+  transition: color 0.15s var(--ease);
+}
+
+.row-edit:hover,
+.row-edit:focus-visible {
+  color: var(--ink);
+}
+
+.row-edit:active {
+  color: var(--signal);
+}
+
+/* La regla de intensidad: dice cuánto pesa la sesión antes de leer nada. */
 .row::before {
   content: '';
   position: absolute;
@@ -492,6 +601,28 @@ a {
   background: var(--rule);
 }
 
+/*
+ * Y encima, la misma regla en verde que baja al marcar. Va en un pseudo-elemento
+ * aparte para poder animar su recorrido sin perder el color de intensidad.
+ */
+.row::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--done);
+  transform: scaleY(0);
+  transform-origin: top center;
+  transition: transform 0.34s var(--ease);
+  pointer-events: none;
+}
+
+.row[data-done='1']::after {
+  transform: scaleY(1);
+}
+
 .row[data-i='1']::before {
   background: var(--ink-soft);
 }
@@ -500,9 +631,6 @@ a {
 }
 .row[data-i='3']::before {
   background: var(--alert);
-}
-.row[data-done='1']::before {
-  background: var(--done);
 }
 
 .row[data-locked='1'] {
@@ -538,11 +666,43 @@ a {
 }
 
 .row-title {
-  display: block;
+  position: relative;
+  display: inline-block;
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.25;
+}
+
+/*
+ * Tachar la línea al terminarla: es lo que se hace en una hoja de tiempos de
+ * papel, y dice "hecho" sin necesidad de un icono ni de un color.
+ */
+.row-title::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0.65em;
+  height: 1px;
+  background: var(--ink-mid);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.32s var(--ease) 0.04s;
+}
+
+.row[data-done='1'] .row-title::after {
+  transform: scaleX(1);
+}
+
+.row[data-done='1'] .row-title {
+  color: var(--ink-mid);
+}
+
+.row-swap {
+  margin-left: 6px;
+  color: var(--signal);
+  letter-spacing: 0.1em;
 }
 
 .row-desc {
@@ -566,14 +726,43 @@ a {
   color: transparent;
   justify-self: end;
   transition:
-    background 0.15s var(--ease),
-    border-color 0.15s var(--ease);
+    background 0.2s var(--ease),
+    border-color 0.2s var(--ease),
+    color 0.2s var(--ease);
+}
+
+/* La marca se dibuja sola: el trazo entra recorriendo su propia longitud. */
+.row-mark svg path {
+  stroke-dasharray: 12;
+  stroke-dashoffset: 12;
+  transition: stroke-dashoffset 0.3s var(--ease) 0.08s;
 }
 
 .row[data-done='1'] .row-mark {
   background: var(--done);
   border-color: var(--done);
   color: var(--paper);
+}
+
+.row[data-done='1'] .row-mark svg path {
+  stroke-dashoffset: 0;
+}
+
+/* El cuño: solo al pulsar, nunca al repintar la lista. */
+@keyframes stamp {
+  0% {
+    transform: scale(0.78);
+  }
+  55% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.row[data-stamp='1'] .row-mark {
+  animation: stamp 0.36s var(--ease);
 }
 
 /* ---------- acordeón de semanas ---------- */
@@ -1026,7 +1215,7 @@ select.input {
   position: fixed;
   left: 50%;
   bottom: calc(var(--safe-b) + 76px);
-  transform: translateX(-50%);
+  transform: translate(-50%, 10px);
   background: var(--ink);
   color: var(--paper);
   padding: 11px 18px;
@@ -1037,13 +1226,16 @@ select.input {
   z-index: 40;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.2s var(--ease);
+  transition:
+    opacity 0.22s var(--ease),
+    transform 0.22s var(--ease);
   max-width: calc(100vw - 40px);
   text-align: center;
 }
 
 .toast.on {
   opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .dot {
@@ -1054,6 +1246,122 @@ select.input {
   background: var(--signal);
   vertical-align: middle;
   margin-right: 7px;
+}
+
+/* --------------------------------------------------------------------------
+   9.5 HOJA DE SUSTITUCIÓN
+   -------------------------------------------------------------------------- */
+.sheet-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* Un velo oscuro fijo: tiene que oscurecer en los dos temas, no seguir a la tinta. */
+.sheet-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(12 10 8 / 0.58);
+  animation: scrim-in 0.22s var(--ease);
+}
+
+.sheet {
+  position: relative;
+  width: 100%;
+  max-height: 92dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--paper);
+  border-top: 1px solid var(--rule-strong);
+  padding: 10px calc(var(--gutter) + var(--safe-r)) calc(var(--safe-b) + 22px)
+    calc(var(--gutter) + var(--safe-l));
+  animation: sheet-in 0.3s var(--ease);
+}
+
+.sheet-grip {
+  width: 34px;
+  height: 3px;
+  margin: 0 auto 16px;
+  border-radius: 2px;
+  background: var(--rule-strong);
+}
+
+.sheet-original {
+  margin: 8px 0 18px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-mid);
+}
+
+.sheet-original b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.sheet-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+/* --------------------------------------------------------------------------
+   9.6 INFORME PARA LA IA
+   -------------------------------------------------------------------------- */
+.pre-wrap {
+  margin-top: 18px;
+  border-top: 1px solid var(--rule);
+}
+
+.pre-wrap summary {
+  padding: 15px 0;
+  list-style: none;
+  cursor: pointer;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.pre-wrap summary::-webkit-details-marker {
+  display: none;
+}
+
+.pre {
+  max-height: 46dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin: 0 0 8px;
+  padding: 14px;
+  background: var(--paper-well);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--ink-mid);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* --------------------------------------------------------------------------

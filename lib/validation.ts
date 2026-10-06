@@ -37,6 +37,32 @@ export const weeklyLogSchema = z.object({
 export type WeeklyLogInput = z.infer<typeof weeklyLogSchema>;
 
 /**
+ * Sustituir una sesión del plan por lo que el atleta haga realmente.
+ *
+ * El título es obligatorio: una sustitución sin título no dice nada. La nota
+ * es opcional y la cadena vacía se normaliza a `null` para no guardar ruido.
+ */
+export const sessionOverrideSchema = z.object({
+  week: WEEK,
+  day: DAY,
+  title: z.string().trim().min(1, 'Escribe qué vas a hacer').max(80),
+  note: z
+    .string()
+    .trim()
+    .max(300)
+    .nullable()
+    .transform((v) => (v === null || v === '' ? null : v)),
+});
+
+export type SessionOverrideInput = z.infer<typeof sessionOverrideSchema>;
+
+/** Quitar una sustitución y volver a la sesión original del plan. */
+export const clearOverrideSchema = z.object({
+  week: WEEK,
+  day: DAY,
+});
+
+/**
  * Convierte un valor de `FormData` en número o `null`.
  * Cadena vacía, ausente o no numérica → `null` (no cero).
  */

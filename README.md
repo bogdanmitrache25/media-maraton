@@ -56,6 +56,31 @@ preferencia del sistema.
 objetivos táctiles de 52 px, `-webkit-text-size-adjust: 100%`, `overscroll-behavior: contain`,
 `viewport-fit: cover` y **campos a 16 px** — por debajo de eso Safari hace zoom al enfocar.
 
+**Movimiento.** Marcar una sesión no es un cambio de estado silencioso: la regla izquierda se
+llena de verde hacia abajo, el título se tacha con un trazo que avanza de izquierda a derecha, la
+marca se dibuja sola y da un golpe de cuño. Son transiciones de CSS, así que se revierten al
+desmarcar, y el único fotograma clave se dispara solo al pulsar — nunca al repintar la lista, para
+que no se animen de golpe las cincuenta filas ya hechas al abrir la app. Todo respeta
+`prefers-reduced-motion`.
+
+---
+
+## Sustituir una sesión
+
+El plan propone; no impone. Cada fila lleva un control para cambiar lo que toca hoy por lo que
+realmente se vaya a hacer. La sesión original nunca se borra: se guarda una capa encima
+(`session_overrides`), así que restaurar es borrar una fila. La sustitución se propaga al héroe,
+a la lista y al informe.
+
+---
+
+## Exportar para analizar
+
+En **Registro → Exportar para tu IA** hay un informe en Markdown con el plan, la adherencia,
+los registros semanales, las sustituciones, el protocolo de referencia y un apartado final con lo
+que se le pide al modelo. Es autocontenido a propósito: quien lo reciba no necesita contexto
+adicional. Se puede copiar al portapapeles o descargar como `.md`.
+
 ---
 
 ## Seguridad
@@ -88,8 +113,12 @@ objetivos táctiles de 52 px, `-webkit-text-size-adjust: 100%`, `overscroll-beha
 - **Validación Zod en el servidor** en todas las Server Actions, además de las restricciones
   `CHECK` de la base de datos.
 - **Comprobación de coherencia de negocio:** no basta con validar tipos, se verifica que la semana
-  y el día existan y que la sesión sea marcable.
+  y el día existan y que la sesión sea accionable.
 - **Errores genéricos hacia el navegador.** Los detalles se registran en el servidor.
+- **Nada de credenciales en la URL.** El formulario de acceso lleva `method="post"` y su botón
+  nace deshabilitado hasta que React hidrata. Sin eso, un envío antes de la hidratación se
+  resolvería como un GET nativo y la contraseña acabaría escrita en la barra de direcciones, en el
+  historial y en los registros del servidor.
 
 ### Red y navegador
 
@@ -124,6 +153,8 @@ objetivos táctiles de 52 px, `-webkit-text-size-adjust: 100%`, `overscroll-beha
 
 En el dashboard de Supabase: **SQL Editor → New query**, pega el contenido de
 `supabase/migrations/0001_init.sql` y pulsa **Run**. Es idempotente.
+
+Después, lo mismo con `supabase/migrations/0002_session_overrides.sql`.
 
 ### 3. Activar el acceso con email
 
@@ -211,6 +242,7 @@ components/
   ThemeToggle.tsx         Conmutador papel / tinta
 lib/
   plan-data.ts            Las 23 semanas (datos puros)
+  export.ts               Informe en Markdown para pasar a una IA
   theme.ts                Constante y tipos del tema
   env.ts                  Validación de variables de entorno
   validation.ts           Esquemas Zod
@@ -232,6 +264,7 @@ middleware.ts             Guardia de auth + cabeceras de seguridad
 |---|---|---|
 | `profiles` | Nombre y avatar, uno por cuenta | SELECT y UPDATE solo de la fila propia |
 | `session_completions` | Casillas marcadas (usuario, semana, día) | SELECT, INSERT y DELETE propios |
+| `session_overrides` | Qué hace el atleta cuando sustituye una sesión | SELECT, INSERT, UPDATE y DELETE propios |
 | `weekly_logs` | Cierre semanal: km, dolor, cadencia, sueño, palpación, ACWR | SELECT, INSERT, UPDATE y DELETE propios |
 | `rate_limits` | Contadores del limitador | Sin políticas: solo `service_role` |
 
