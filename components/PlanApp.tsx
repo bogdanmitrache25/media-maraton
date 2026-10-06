@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { resetMyProgress, saveWeeklyLog, toggleSession } from '@/app/plan/actions';
 import { PreventionTab } from '@/components/PreventionTab';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import type { ThemeChoice } from '@/lib/theme';
 import {
   DAY_NAMES,
   PHASES,
-  SESSION_TYPES,
   WEEKS,
   dateOf,
   dayIndexIn,
@@ -35,25 +36,50 @@ interface Props {
   initialDone: string[];
   initialLogs: LogRow[];
   serverToday: string;
+  theme?: ThemeChoice;
 }
 
 type Tab = 'hoy' | 'plan' | 'pre' | 'reg';
 
 const KEY = (week: number, day: number) => `${week}:${day}`;
 
-/** Fecha local del dispositivo en formato YYYY-MM-DD. */
+/** Código tipográfico de sesión. Sustituye a los iconos y a los badges de color. */
+const CODE: Record<SessionType, string> = {
+  A: 'FONDO',
+  B: 'CALIDAD',
+  C: 'CRUCE',
+  G: 'FUERZA',
+  R: 'LIBRE',
+  T: 'TEST',
+  Z: 'CARRERA',
+};
+
+/** Intensidad 0-3. Es lo que codifica el color de la regla izquierda. */
+const INTENSITY: Record<SessionType, 0 | 1 | 2 | 3> = {
+  R: 0,
+  C: 1,
+  G: 1,
+  A: 2,
+  B: 2,
+  T: 3,
+  Z: 3,
+};
+
 function localToday(): string {
   const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate(),
+  ).padStart(2, '0')}`;
 }
 
-export function PlanApp({ user, initialDone, initialLogs, serverToday }: Props) {
+const rangeShort = (iso: string) =>
+  new Date(`${iso}T12:00:00Z`)
+    .toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' })
+    .replace(/\./g, '')
+    .toUpperCase();
+
+export function PlanApp({ user, initialDone, initialLogs, serverToday, theme }: Props) {
   const [tab, setTab] = useState<Tab>('hoy');
-  // Arrancamos con la fecha del servidor (coincide con el HTML prerenderizado)
-  // y la corregimos a la fecha local del dispositivo tras hidratar.
   const [today, setToday] = useState(serverToday);
   const [done, setDone] = useState<Set<string>>(() => new Set(initialDone));
   const [logs, setLogs] = useState<Record<number, LogRow>>(() => {
@@ -64,57 +90,46 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday }: Props) 
   const [openWeeks, setOpenWeeks] = useState<Set<number>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => {
-    setToday(localToday());
-  }, []);
+  useEffect(() => setToday(localToday()), []);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
-    window.setTimeout(() => setToast(null), 2600);
+    window.setTimeout(() => setToast(null), 2800);
   }, []);
 
   /* ---------------------------------------------------------------- */
-  /*  Progreso                                                         */
-  /* ---------------------------------------------------------------- */
 
-  const { totalSessions, doneSessions } = useMemo(() => {
-    let total = 0;
-    let complete = 0;
-    for (const w of WEEKS) {
-      total += weekTotal(w);
-      for (let i = 0; i < 7; i++) {
-        const day = w.days[i];
-        if (day && isCountable(day.type) && done.has(KEY(w.n, i))) complete++;
-      }
-    }
-    return { totalSessions: total, doneSessions: complete };
-  }, [done]);
-
-  const percent = totalSessions ? Math.round((doneSessions / totalSessions) * 100) : 0;
-
-  const weekProgress = useCallback(
+  const progressOf = useCallback(
     (w: Week) => {
-      const total = weekTotal(w);
+      let total = 0;
       let complete = 0;
       for (let i = 0; i < 7; i++) {
         const day = w.days[i];
-        if (day && isCountable(day.type) && done.has(KEY(w.n, i))) complete++;
+        if (!day || !isCountable(day.type)) continue;
+        total++;
+        if (done.has(KEY(w.n, i))) complete++;
       }
       return { total, complete };
     },
     [done],
   );
 
-  /* ---------------------------------------------------------------- */
-  /*  Marcar / desmarcar                                               */
-  /* ---------------------------------------------------------------- */
+  const overall = useMemo(() => {
+    let total = 0;
+    let complete = 0;
+    for (const w of WEEKS) {
+      const p = progressOf(w);
+      total += p.total;
+      complete += p.complete;
+    }
+    return { total, complete, pct: total ? Math.round((complete / total) * 100) : 0 };
+  }, [progressOf]);
 
   const handleToggle = useCallback(
     async (week: number, day: number) => {
       const key = KEY(week, day);
       const wasDone = done.has(key);
 
-      // Actualización optimista: la interfaz responde al instante.
       setDone((prev) => {
         const next = new Set(prev);
         if (wasDone) next.delete(key);
@@ -122,25 +137,22 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday }: Props) 
         return next;
       });
 
-      try {
-        const result = await toggleSession({ week, day, done: !wasDone });
-        if (!result.ok) {
-          // Revertimos si el servidor lo rechazó.
-          setDone((prev) => {
-            const next = new Set(prev);
-            if (wasDone) next.add(key);
-            else next.delete(key);
-            return next;
-          });
-          showToast(result.error);
-        }
-      } catch {
+      const rollback = () =>
         setDone((prev) => {
           const next = new Set(prev);
           if (wasDone) next.add(key);
           else next.delete(key);
           return next;
         });
+
+      try {
+        const result = await toggleSession({ week, day, done: !wasDone });
+        if (!result.ok) {
+          rollback();
+          showToast(result.error);
+        }
+      } catch {
+        rollback();
         showToast('Sin conexión. Inténtalo de nuevo.');
       }
     },
@@ -148,49 +160,66 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday }: Props) 
   );
 
   /* ---------------------------------------------------------------- */
-  /*  Render                                                           */
-  /* ---------------------------------------------------------------- */
 
   return (
-    <>
-      <header className="app-header">
-        <div className="hd-row">
+    <div className="shell">
+      <header className="hdr">
+        <div className="hdr-top">
           <div style={{ minWidth: 0 }}>
-            <div className="hd-title">Media Maratón</div>
-            <div className="hd-sub">14 de marzo de 2027 · {user.name}</div>
+            <p className="wordmark">
+              MM <em>1:50</em>
+            </p>
+            <p className="hdr-sub">14 MAR 2027 · {user.name}</p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 'none' }}>
-            <span className="hd-goal">1:50</span>
-            {user.avatarUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={user.avatarUrl}
-                alt=""
-                width={30}
-                height={30}
-                style={{ borderRadius: '50%', border: '1px solid var(--line)' }}
-                referrerPolicy="no-referrer"
-              />
-            )}
+          <ThemeToggle initial={theme} />
+        </div>
+
+        <div className="strip">
+          <div className="strip-bars">
+            {WEEKS.map((w, idx) => {
+              const { total, complete } = progressOf(w);
+              const pct = total ? (complete / total) * 100 : 0;
+              const isNow = weekOfDate(today)?.n === w.n;
+              const prev = WEEKS[idx - 1];
+              const newPhase = prev ? prev.phase !== w.phase : false;
+              return (
+                <div
+                  key={w.n}
+                  className={[
+                    'bar',
+                    pct >= 100 ? 'is-full' : '',
+                    isNow ? 'is-now' : '',
+                    pct === 0 ? 'is-empty' : '',
+                    newPhase ? 'gap' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  title={`Semana ${w.n} · ${complete}/${total}`}
+                >
+                  <div className="bar-track">
+                    <div className="bar-fill" style={{ height: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
-        <div className="bar">
-          <i style={{ width: `${percent}%` }} />
-        </div>
-        <div className="bar-lbl">
-          <span>{percent} % completado</span>
-          <span>
-            {doneSessions}/{totalSessions} sesiones
-          </span>
+          <div className="strip-legend">
+            <span>S01</span>
+            <span className="strip-count">
+              {overall.complete}/{overall.total} · {overall.pct}%
+            </span>
+            <span>S23</span>
+          </div>
         </div>
       </header>
 
-      <main className="app-main">
+      <main className="main">
         <section className={`view ${tab === 'hoy' ? 'on' : ''}`}>
           <TodayView
             today={today}
             done={done}
             onToggle={handleToggle}
+            progressOf={progressOf}
           />
         </section>
 
@@ -200,7 +229,7 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday }: Props) 
             done={done}
             openWeeks={openWeeks}
             setOpenWeeks={setOpenWeeks}
-            weekProgress={weekProgress}
+            progressOf={progressOf}
             onToggle={handleToggle}
           />
         </section>
@@ -210,19 +239,14 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday }: Props) 
         </section>
 
         <section className={`view ${tab === 'reg' ? 'on' : ''}`}>
-          <LogView
-            today={today}
-            logs={logs}
-            setLogs={setLogs}
-            showToast={showToast}
-          />
+          <LogView today={today} logs={logs} setLogs={setLogs} showToast={showToast} />
         </section>
 
-        <div className="card" style={{ marginTop: 20 }}>
-          <h3>Sesión</h3>
-          <div className="tiny" style={{ marginBottom: 10 }}>
+        <div className="sect">
+          <p className="eyebrow">Cuenta</p>
+          <p className="num soft" style={{ fontSize: 12, margin: '10px 0 16px' }}>
             {user.email}
-          </div>
+          </p>
           <form action="/auth/signout" method="post">
             <button className="btn" type="submit">
               Cerrar sesión
@@ -231,48 +255,43 @@ export function PlanApp({ user, initialDone, initialLogs, serverToday }: Props) 
         </div>
       </main>
 
-      <nav className="tabbar">
-        <TabButton id="hoy" label="Hoy" icon="◎" tab={tab} setTab={setTab} />
-        <TabButton id="plan" label="Plan" icon="▤" tab={tab} setTab={setTab} />
-        <TabButton id="pre" label="Prevención" icon="✚" tab={tab} setTab={setTab} />
-        <TabButton id="reg" label="Registro" icon="✎" tab={tab} setTab={setTab} />
+      <nav className="rail">
+        <TabButton id="hoy" label="Hoy" tab={tab} setTab={setTab} />
+        <TabButton id="plan" label="Plan" tab={tab} setTab={setTab} />
+        <TabButton id="pre" label="Protección" tab={tab} setTab={setTab} />
+        <TabButton id="reg" label="Registro" tab={tab} setTab={setTab} />
       </nav>
 
       <div className={`toast ${toast ? 'on' : ''}`} role="status" aria-live="polite">
         {toast}
       </div>
-    </>
+    </div>
   );
 }
 
-/* ==================================================================== */
-/*  Pestañas                                                            */
 /* ==================================================================== */
 
 function TabButton({
   id,
   label,
-  icon,
   tab,
   setTab,
 }: {
   id: Tab;
   label: string;
-  icon: string;
   tab: Tab;
   setTab: (t: Tab) => void;
 }) {
+  const on = tab === id;
   return (
     <button
-      className={tab === id ? 'on' : ''}
+      type="button"
+      aria-current={on ? 'page' : undefined}
       onClick={() => {
         setTab(id);
-        document.querySelector('main.app-main')?.scrollTo({ top: 0 });
+        document.querySelector('main.main')?.scrollTo({ top: 0 });
       }}
-      type="button"
-      aria-current={tab === id ? 'page' : undefined}
     >
-      <b aria-hidden="true">{icon}</b>
       {label}
     </button>
   );
@@ -286,120 +305,119 @@ function TodayView({
   today,
   done,
   onToggle,
+  progressOf,
 }: {
   today: string;
   done: Set<string>;
   onToggle: (w: number, d: number) => void;
+  progressOf: (w: Week) => { total: number; complete: number };
 }) {
-  const currentWeek = weekOfDate(today);
-  const dayIndex = currentWeek ? dayIndexIn(currentWeek, today) : -1;
+  const week = weekOfDate(today);
+  const dayIndex = week ? dayIndexIn(week, today) : -1;
 
-  const nextMilestone = useMemo(() => {
-    const milestones = [
-      { date: '2026-11-18', label: '🔬 Test de 5K en cinta' },
-      { date: '2027-01-06', label: '🔬 Test de 10K — checkpoint del objetivo' },
-      { date: '2027-02-07', label: '🏁 Tune-up: 10K a ritmo de competición' },
-      { date: '2027-03-14', label: '🏁 MEDIA MARATÓN — objetivo 1:50:00' },
+  const milestone = useMemo(() => {
+    const list = [
+      { date: '2026-11-18', label: 'Test de 5K' },
+      { date: '2027-01-06', label: 'Test de 10K' },
+      { date: '2027-02-07', label: 'Tune-up 10K' },
+      { date: '2027-03-14', label: 'Media maratón' },
     ];
-    return milestones.find((m) => m.date >= today) ?? null;
+    return list.find((m) => m.date >= today) ?? null;
   }, [today]);
 
-  if (!currentWeek || dayIndex < 0) {
+  if (!week || dayIndex < 0) {
     return (
-      <div className="card">
-        <h3>Fuera de la ventana del plan</h3>
-        <div className="muted">Hoy no cae dentro de las 23 semanas de preparación.</div>
-        <div className="muted" style={{ marginTop: 8 }}>
-          El plan arranca el 5 de octubre de 2026 y termina el 14 de marzo de 2027.
-        </div>
+      <div className="hero" style={{ marginTop: 18 }}>
+        <p className="eyebrow">Fuera de plan</p>
+        <h2 className="hero-title">Sin sesión hoy</h2>
+        <p className="hero-note">
+          El plan cubre del 5 de octubre de 2026 al 14 de marzo de 2027.
+        </p>
       </div>
     );
   }
 
-  const phase = PHASES[currentWeek.phase];
-  const todaySession = currentWeek.days[dayIndex];
-  const daysToMilestone = nextMilestone
+  const phase = PHASES[week.phase];
+  const session = week.days[dayIndex];
+  const { total, complete } = progressOf(week);
+  const isDone = session ? done.has(KEY(week.n, dayIndex)) : false;
+
+  const daysToMilestone = milestone
     ? Math.max(
         0,
         Math.round(
-          (Date.parse(`${nextMilestone.date}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) /
-            86400000,
+          (Date.parse(`${milestone.date}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86400000,
         ),
       )
     : 0;
 
   return (
     <>
-      <div className="card" style={{ borderColor: `${phase.color}55` }}>
-        <div className="tiny" style={{ color: phase.color, fontWeight: 800, letterSpacing: 0.5 }}>
-          FASE {currentWeek.phase} · {phase.name.toUpperCase()}
-        </div>
-        <h3 style={{ fontSize: 19, margin: '6px 0 2px' }}>
-          Semana {currentWeek.n} · {formatRange(currentWeek.start)}
-        </h3>
-        <div className="muted">
-          {currentWeek.focus} · {currentWeek.km}
-        </div>
-      </div>
+      <div className="hero">
+        <p className="eyebrow">
+          FASE {week.phase} · SEMANA {String(week.n).padStart(2, '0')} · {phase.name.toUpperCase()}
+        </p>
 
-      {todaySession && (
-        <div className="card">
-          <div className="tiny">HOY · {DAY_NAMES[dayIndex]?.toUpperCase()}</div>
-          <div
-            style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0 4px', flexWrap: 'wrap' }}
-          >
-            <span className={`d-cap ${typeClass(todaySession.type)}`}>
-              {SESSION_TYPES[todaySession.type].label}
-            </span>
-            <span style={{ fontSize: 15, fontWeight: 650 }}>{todaySession.title}</span>
-          </div>
-          {todaySession.desc && <div className="muted">{todaySession.desc}</div>}
-
-          {isCountable(todaySession.type) ? (
-            <button
-              type="button"
-              className={`d ${done.has(KEY(currentWeek.n, dayIndex)) ? 'ck' : ''}`}
-              style={{ border: 0, padding: '12px 0 0' }}
-              onClick={() => onToggle(currentWeek.n, dayIndex)}
-              aria-pressed={done.has(KEY(currentWeek.n, dayIndex))}
-            >
-              <span className="d-main">
-                <span className="d-ttl" style={{ fontSize: 13, color: 'var(--tx2)' }}>
-                  {done.has(KEY(currentWeek.n, dayIndex)) ? 'Hecha' : 'Marcar como hecha'}
-                </span>
+        {session ? (
+          <>
+            <h2 className="hero-title">{session.title}</h2>
+            <div className="hero-meta">
+              <span>
+                {DAY_NAMES[dayIndex]?.toUpperCase()} {rangeShort(today)}
               </span>
-              <span className="box">✓</span>
-            </button>
-          ) : (
-            <div className="tiny" style={{ marginTop: 10 }}>
-              Día de descanso. TB: rutina tibial/sóleo 8-10 min.
+              <span>{CODE[session.type]}</span>
+              {week.km !== 'carrera' && <span>{week.km.toUpperCase()}</span>}
             </div>
-          )}
-        </div>
-      )}
 
-      <div className="card">
-        <h3>Resto de la semana</h3>
-        {currentWeek.days.map((day, i) => (
-          <DayRow
-            key={i}
-            day={day}
-            dayIndex={i}
-            done={done.has(KEY(currentWeek.n, i))}
-            isToday={i === dayIndex}
-            onToggle={() => onToggle(currentWeek.n, i)}
-          />
-        ))}
+            {isCountable(session.type) ? (
+              <button
+                type="button"
+                className="hero-action"
+                aria-pressed={isDone}
+                onClick={() => onToggle(week.n, dayIndex)}
+              >
+                {isDone ? 'Hecha — desmarcar' : 'Marcar como hecha'}
+              </button>
+            ) : (
+              <p className="hero-note">
+                Día de descanso. Rutina tibial y de sóleo, 8-10 min.
+              </p>
+            )}
+
+            {session.desc && <p className="hero-note">{session.desc}</p>}
+          </>
+        ) : null}
       </div>
 
-      {nextMilestone && (
-        <div className="card">
-          <h3>Próximo hito</h3>
-          <div
-            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}
-          >
-            <span style={{ fontSize: 15, fontWeight: 650 }}>{nextMilestone.label}</span>
-            <span className="tiny">{daysToMilestone} días</span>
+      <div className="sect">
+        <div className="sect-head">
+          <p className="eyebrow">Semana en curso</p>
+          <span className="num soft" style={{ fontSize: 11 }}>
+            {complete}/{total}
+          </span>
+        </div>
+        <div className="ledger">
+          {week.days.map((day, i) => (
+            <DayRow
+              key={i}
+              day={day}
+              dayIndex={i}
+              done={done.has(KEY(week.n, i))}
+              isToday={i === dayIndex}
+              onToggle={() => onToggle(week.n, i)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {milestone && (
+        <div className="sect">
+          <p className="eyebrow">Próximo hito</p>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 12 }}>
+            <p className="hero-num">{daysToMilestone}</p>
+            <p className="num dim" style={{ fontSize: 11, letterSpacing: '0.1em' }}>
+              DÍAS · {milestone.label.toUpperCase()}
+            </p>
           </div>
         </div>
       )}
@@ -416,42 +434,43 @@ function PlanView({
   done,
   openWeeks,
   setOpenWeeks,
-  weekProgress,
+  progressOf,
   onToggle,
 }: {
   today: string;
   done: Set<string>;
   openWeeks: Set<number>;
   setOpenWeeks: (fn: (prev: Set<number>) => Set<number>) => void;
-  weekProgress: (w: Week) => { total: number; complete: number };
+  progressOf: (w: Week) => { total: number; complete: number };
   onToggle: (w: number, d: number) => void;
 }) {
-  const phaseNumbers = [1, 2, 3, 4, 5, 6] as const;
+  const order = [1, 2, 3, 4, 5, 6] as const;
 
   return (
     <>
-      {phaseNumbers.map((phaseNumber) => {
-        const phase = PHASES[phaseNumber];
-        const weeks = WEEKS.filter((w) => w.phase === phaseNumber);
-        if (weeks.length === 0) return null;
+      {order.map((p) => {
+        const phase = PHASES[p];
+        const weeks = WEEKS.filter((w) => w.phase === p);
+        if (!weeks.length) return null;
 
         return (
-          <div key={phaseNumber}>
-            <div className="phase-h">
-              <i style={{ background: phase.color }} />
-              {phase.name}
-              <span>{phase.weeks}</span>
+          <div key={p}>
+            <div className="phase">
+              <span className="phase-name">{phase.name}</span>
+              <span className="phase-rule" />
+              <span className="eyebrow">{phase.weeks}</span>
             </div>
 
             {weeks.map((w) => {
-              const { total, complete } = weekProgress(w);
-              const isOpen = openWeeks.has(w.n);
+              const { total, complete } = progressOf(w);
+              const open = openWeeks.has(w.n);
+              const full = total > 0 && complete === total;
               return (
-                <div key={w.n} className={`wk ${complete === total && total > 0 ? 'done' : ''} ${isOpen ? 'open' : ''}`}>
+                <div key={w.n} className={`week ${open ? 'open' : ''}`} data-full={full ? 1 : 0}>
                   <button
-                    className="wk-h"
                     type="button"
-                    aria-expanded={isOpen}
+                    className="week-h"
+                    aria-expanded={open}
                     onClick={() =>
                       setOpenWeeks((prev) => {
                         const next = new Set(prev);
@@ -461,40 +480,32 @@ function PlanView({
                       })
                     }
                   >
-                    <span className="wk-num" style={{ color: phase.color }}>
-                      S{w.n}
-                    </span>
-                    <span className="wk-mid">
-                      <span className="wk-t" style={{ display: 'block' }}>
-                        {w.focus}
-                      </span>
-                      <span className="wk-s" style={{ display: 'block' }}>
-                        {formatRange(w.start)} · {complete}/{total} sesiones
-                        {w.test ? ' · 🔬 TEST' : ''}
-                        {w.race ? ' · 🏁' : ''}
+                    <span className="week-n">S{String(w.n).padStart(2, '0')}</span>
+                    <span>
+                      <span className="week-f">{w.focus}</span>
+                      <span className="week-s">
+                        {formatRange(w.start)} · {complete}/{total}
+                        {w.test ? ' · TEST' : ''}
+                        {w.race ? ' · CARRERA' : ''}
                       </span>
                     </span>
-                    <span className="wk-km">{w.km}</span>
-                    <span className="chk" aria-hidden="true" />
+                    <span className="week-km">{w.km}</span>
                   </button>
 
-                  <div className="wk-b">
-                    {w.note && (
-                      <div className={`note ${w.warn ? 'warn' : ''}`}>
-                        {w.warn ? '⚠️ ' : '🎯 '}
-                        {w.note}
-                      </div>
-                    )}
-                    {w.days.map((day, i) => (
-                      <DayRow
-                        key={i}
-                        day={day}
-                        dayIndex={i}
-                        done={done.has(KEY(w.n, i))}
-                        isToday={dateOf(w.n, i) === today}
-                        onToggle={() => onToggle(w.n, i)}
-                      />
-                    ))}
+                  <div className="week-b">
+                    {w.note && <p className="week-note">{w.note}</p>}
+                    <div className="ledger">
+                      {w.days.map((day, i) => (
+                        <DayRow
+                          key={i}
+                          day={day}
+                          dayIndex={i}
+                          done={done.has(KEY(w.n, i))}
+                          isToday={dateOf(w.n, i) === today}
+                          onToggle={() => onToggle(w.n, i)}
+                        />
+                      ))}
+                    </div>
                   </div>
                 </div>
               );
@@ -507,7 +518,7 @@ function PlanView({
 }
 
 /* ==================================================================== */
-/*  Fila de día                                                         */
+/*  FILA DE DÍA                                                         */
 /* ==================================================================== */
 
 function DayRow({
@@ -523,33 +534,28 @@ function DayRow({
   isToday: boolean;
   onToggle: () => void;
 }) {
-  const meta = SESSION_TYPES[day.type];
   const locked = !isCountable(day.type);
 
   const inner = (
     <>
-      <span className="d-bar" style={{ background: meta.bar }} />
-      <span className="d-day">{DAY_NAMES[dayIndex]}</span>
-      <span className="d-main">
-        <span className="d-top">
-          <span className={`d-cap ${typeClass(day.type)}`}>{meta.label}</span>
-          <span className="d-ttl">{day.title}</span>
-        </span>
-        {day.desc && (
-          <span className="d-desc" style={{ display: 'block' }}>
-            {day.desc}
-          </span>
-        )}
+      <span className="row-day">{DAY_NAMES[dayIndex]}</span>
+      <span className="row-body">
+        <span className="row-code">{CODE[day.type]}</span>
+        <span className="row-title">{day.title}</span>
+        {day.desc && <span className="row-desc">{day.desc}</span>}
       </span>
-      <span className="box" aria-hidden="true">
-        ✓
-      </span>
+      <span className="row-mark">{done && <Tick />}</span>
     </>
   );
 
   if (locked) {
     return (
-      <div className={`d d-lock ${isToday ? 'today' : ''}`} aria-hidden="true">
+      <div
+        className="row"
+        data-i={INTENSITY[day.type]}
+        data-locked="1"
+        data-today={isToday ? '1' : '0'}
+      >
         {inner}
       </div>
     );
@@ -558,13 +564,30 @@ function DayRow({
   return (
     <button
       type="button"
-      className={`d ${done ? 'ck' : ''} ${isToday ? 'today' : ''}`}
-      onClick={onToggle}
+      className="row"
+      data-i={INTENSITY[day.type]}
+      data-done={done ? '1' : '0'}
+      data-today={isToday ? '1' : '0'}
       aria-pressed={done}
       aria-label={`${DAY_NAMES[dayIndex]}: ${day.title}`}
+      onClick={onToggle}
     >
       {inner}
     </button>
+  );
+}
+
+function Tick() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
+      <path
+        d="M2 6.5 4.6 9 10 3.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="square"
+      />
+    </svg>
   );
 }
 
@@ -583,82 +606,70 @@ function LogView({
   setLogs: (fn: (prev: Record<number, LogRow>) => Record<number, LogRow>) => void;
   showToast: (m: string) => void;
 }) {
-  const [selectedWeek, setSelectedWeek] = useState(() => weekOfDate(today)?.n ?? 1);
+  const [week, setWeek] = useState(() => weekOfDate(today)?.n ?? 1);
   const [saving, setSaving] = useState(false);
+  const current = logs[week];
 
-  const current = logs[selectedWeek];
+  const [calc, setCalc] = useState({ w1: '', w2: '', w3: '', w4: '', cur: '' });
+  const [result, setResult] = useState<{ v: number; label: string; color: string } | null>(null);
 
-  /* --- Calculadora de ACWR (solo cliente) --- */
-  const [acwrInput, setAcwrInput] = useState({ w1: '', w2: '', w3: '', w4: '', current: '' });
-  const [acwrResult, setAcwrResult] = useState<{ value: number; label: string; color: string } | null>(
-    null,
-  );
-
-  function calculateAcwr() {
-    const prev = [acwrInput.w1, acwrInput.w2, acwrInput.w3, acwrInput.w4]
+  function computeAcwr() {
+    const nums = [calc.w1, calc.w2, calc.w3, calc.w4]
       .map((v) => Number(String(v).replace(',', '.')))
-      .filter((n) => Number.isFinite(n) && String(n) !== '');
-    const cur = Number(String(acwrInput.current).replace(',', '.'));
+      .filter((n) => Number.isFinite(n));
+    const cur = Number(String(calc.cur).replace(',', '.'));
+    if (!nums.length || calc.cur === '' || !Number.isFinite(cur)) return setResult(null);
 
-    if (prev.length === 0 || !Number.isFinite(cur) || acwrInput.current === '') {
-      setAcwrResult(null);
-      return;
-    }
-    const avg = prev.reduce((a, b) => a + b, 0) / prev.length;
-    if (avg <= 0) {
-      setAcwrResult(null);
-      return;
-    }
-    const value = cur / avg;
+    const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+    if (avg <= 0) return setResult(null);
 
+    const v = cur / avg;
     let label: string;
     let color: string;
-    if (value < 0.8) {
+    if (v < 0.8) {
       label = 'Infraentrenamiento. Puedes subir.';
-      color = '#60a5fa';
-    } else if (value <= 1.3) {
+      color = 'var(--ink-mid)';
+    } else if (v <= 1.3) {
       label = 'Zona segura. Adelante.';
-      color = '#22c55e';
-    } else if (value <= 1.5) {
-      label = 'Riesgo elevado. NO subas esta semana.';
-      color = '#eab308';
+      color = 'var(--done)';
+    } else if (v <= 1.5) {
+      label = 'Riesgo elevado. No subas esta semana.';
+      color = 'var(--warn)';
     } else {
-      label = 'Zona de lesión. Repite o baja el volumen.';
-      color = '#ef4444';
+      label = 'Zona de lesión. Repite o baja.';
+      color = 'var(--alert)';
     }
-    setAcwrResult({ value, label, color });
+    setResult({ v, label, color });
   }
 
-  async function handleSubmit(formData: FormData) {
+  async function submit(formData: FormData) {
     setSaving(true);
     try {
-      const result = await saveWeeklyLog(formData);
-      if (!result.ok) {
-        showToast(result.error);
-        return;
-      }
-      const week = Number(formData.get('week'));
+      const res = await saveWeeklyLog(formData);
+      if (!res.ok) return showToast(res.error);
+
+      const n = Number(formData.get('week'));
       const num = (k: string) => {
         const raw = String(formData.get(k) ?? '').replace(',', '.');
         if (raw === '') return null;
-        const n = Number(raw);
-        return Number.isFinite(n) ? n : null;
+        const x = Number(raw);
+        return Number.isFinite(x) ? x : null;
       };
       setLogs((prev) => ({
         ...prev,
-        [week]: {
-          week,
+        [n]: {
+          week: n,
           km: num('km'),
           pain: num('pain'),
           cadence: num('cadence'),
           sleep: num('sleep'),
           palpD: num('palpD'),
           palpI: num('palpI'),
-          acwr: acwrResult ? Number(acwrResult.value.toFixed(2)) : (prev[week]?.acwr ?? null),
+          acwr: result ? Number(result.v.toFixed(2)) : (prev[n]?.acwr ?? null),
           notes: String(formData.get('notes') ?? '').trim() || null,
         },
       }));
-      showToast('Semana guardada ✓');
+      showToast('Semana guardada');
     } catch {
       showToast('Sin conexión. Inténtalo de nuevo.');
     } finally {
@@ -666,16 +677,12 @@ function LogView({
     }
   }
 
-  async function handleReset() {
-    if (!window.confirm('¿Borrar TODO tu progreso y tus registros? No se puede deshacer.')) return;
+  async function reset() {
+    if (!window.confirm('¿Borrar todo tu progreso y tus registros? No se puede deshacer.')) return;
     setSaving(true);
     try {
-      const result = await resetMyProgress();
-      if (!result.ok) {
-        showToast(result.error);
-        return;
-      }
-      setLogs(() => ({}));
+      const res = await resetMyProgress();
+      if (!res.ok) return showToast(res.error);
       window.location.reload();
     } catch {
       showToast('Sin conexión. Inténtalo de nuevo.');
@@ -684,87 +691,96 @@ function LogView({
     }
   }
 
-  const historyRows = Object.values(logs).sort((a, b) => a.week - b.week);
+  const history = Object.values(logs).sort((a, b) => a.week - b.week);
 
   return (
     <>
-      <div className="card">
-        <h3>📊 Calculadora de ACWR</h3>
-        <div className="muted" style={{ marginBottom: 10 }}>
-          Rellena los km de las últimas 4 semanas. Te dice si puedes subir.
-        </div>
+      <div className="sect">
+        <p className="eyebrow">Calculadora de carga</p>
+        <p className="dim" style={{ fontSize: 13, margin: '10px 0 16px', maxWidth: '38ch' }}>
+          Kilómetros de las cuatro semanas anteriores y de la actual. El cociente dice si puedes
+          subir.
+        </p>
+
         <div className="grid2">
           <Field label="Semana −4">
             <input
+              className="input"
               type="number"
               inputMode="decimal"
-              placeholder="km"
-              value={acwrInput.w1}
-              onChange={(e) => setAcwrInput((s) => ({ ...s, w1: e.target.value }))}
+              value={calc.w1}
+              onChange={(e) => setCalc((s) => ({ ...s, w1: e.target.value }))}
             />
           </Field>
           <Field label="Semana −3">
             <input
+              className="input"
               type="number"
               inputMode="decimal"
-              placeholder="km"
-              value={acwrInput.w2}
-              onChange={(e) => setAcwrInput((s) => ({ ...s, w2: e.target.value }))}
+              value={calc.w2}
+              onChange={(e) => setCalc((s) => ({ ...s, w2: e.target.value }))}
             />
           </Field>
           <Field label="Semana −2">
             <input
+              className="input"
               type="number"
               inputMode="decimal"
-              placeholder="km"
-              value={acwrInput.w3}
-              onChange={(e) => setAcwrInput((s) => ({ ...s, w3: e.target.value }))}
+              value={calc.w3}
+              onChange={(e) => setCalc((s) => ({ ...s, w3: e.target.value }))}
             />
           </Field>
           <Field label="Semana −1">
             <input
+              className="input"
               type="number"
               inputMode="decimal"
-              placeholder="km"
-              value={acwrInput.w4}
-              onChange={(e) => setAcwrInput((s) => ({ ...s, w4: e.target.value }))}
+              value={calc.w4}
+              onChange={(e) => setCalc((s) => ({ ...s, w4: e.target.value }))}
             />
           </Field>
         </div>
+
         <Field label="Semana actual">
           <input
+            className="input"
             type="number"
             inputMode="decimal"
-            placeholder="km"
-            value={acwrInput.current}
-            onChange={(e) => setAcwrInput((s) => ({ ...s, current: e.target.value }))}
+            value={calc.cur}
+            onChange={(e) => setCalc((s) => ({ ...s, cur: e.target.value }))}
           />
         </Field>
-        <button className="btn btn-primary" type="button" onClick={calculateAcwr}>
-          Calcular ACWR
+
+        <button className="btn btn-solid" type="button" onClick={computeAcwr}>
+          Calcular
         </button>
-        <div className="acwr-out" style={acwrResult ? { color: acwrResult.color } : undefined}>
-          {acwrResult ? acwrResult.value.toFixed(2) : '—'}
-        </div>
-        {acwrResult && (
-          <div className="tiny" style={{ textAlign: 'center', marginTop: 4, color: acwrResult.color, fontWeight: 700 }}>
-            {acwrResult.label}
-          </div>
+
+        <p className="out" style={result ? { color: result.color } : undefined}>
+          {result ? result.v.toFixed(2) : '—'}
+        </p>
+        {result && (
+          <p
+            className="eyebrow"
+            style={{ textAlign: 'center', color: result.color, letterSpacing: '0.1em' }}
+          >
+            {result.label}
+          </p>
         )}
       </div>
 
-      <div className="card">
-        <h3>📝 Cierre de semana</h3>
-        <form action={handleSubmit} key={selectedWeek}>
+      <div className="sect">
+        <p className="eyebrow">Cierre de semana</p>
+        <form action={submit} key={week} style={{ marginTop: 16 }}>
           <Field label="Semana">
             <select
+              className="input"
               name="week"
-              value={selectedWeek}
-              onChange={(e) => setSelectedWeek(Number(e.target.value))}
+              value={week}
+              onChange={(e) => setWeek(Number(e.target.value))}
             >
               {WEEKS.map((w) => (
                 <option key={w.n} value={w.n}>
-                  S{w.n} · {formatRange(w.start)}
+                  S{String(w.n).padStart(2, '0')} · {formatRange(w.start)}
                 </option>
               ))}
             </select>
@@ -772,52 +788,29 @@ function LogView({
 
           <div className="grid2">
             <Field label="Km totales">
-              <input name="km" type="number" inputMode="decimal" defaultValue={current?.km ?? ''} />
+              <input className="input" name="km" type="number" inputMode="decimal" defaultValue={current?.km ?? ''} />
             </Field>
-            <Field label="Dolor máx (0-10)">
-              <input name="pain" type="number" inputMode="numeric" defaultValue={current?.pain ?? ''} />
+            <Field label="Dolor máx 0-10">
+              <input className="input" name="pain" type="number" inputMode="numeric" defaultValue={current?.pain ?? ''} />
             </Field>
-            <Field label="Cadencia (ppm)">
-              <input
-                name="cadence"
-                type="number"
-                inputMode="numeric"
-                defaultValue={current?.cadence ?? ''}
-              />
+            <Field label="Cadencia ppm">
+              <input className="input" name="cadence" type="number" inputMode="numeric" defaultValue={current?.cadence ?? ''} />
             </Field>
-            <Field label="Sueño medio (h)">
-              <input
-                name="sleep"
-                type="number"
-                inputMode="decimal"
-                step="0.1"
-                defaultValue={current?.sleep ?? ''}
-              />
+            <Field label="Sueño medio h">
+              <input className="input" name="sleep" type="number" inputMode="decimal" step="0.1" defaultValue={current?.sleep ?? ''} />
             </Field>
-            <Field label="Palpación tibia D (cm)">
-              <input
-                name="palpD"
-                type="number"
-                inputMode="decimal"
-                step="0.5"
-                defaultValue={current?.palpD ?? ''}
-              />
+            <Field label="Tibia D cm">
+              <input className="input" name="palpD" type="number" inputMode="decimal" step="0.5" defaultValue={current?.palpD ?? ''} />
             </Field>
-            <Field label="Palpación tibia I (cm)">
-              <input
-                name="palpI"
-                type="number"
-                inputMode="decimal"
-                step="0.5"
-                defaultValue={current?.palpI ?? ''}
-              />
+            <Field label="Tibia I cm">
+              <input className="input" name="palpI" type="number" inputMode="decimal" step="0.5" defaultValue={current?.palpI ?? ''} />
             </Field>
           </div>
 
-          <input type="hidden" name="acwr" value={acwrResult ? acwrResult.value.toFixed(2) : ''} />
+          <input type="hidden" name="acwr" value={result ? result.v.toFixed(2) : ''} />
 
           <Field label="Notas">
-            <input name="notes" type="text" placeholder="Cómo ha ido la semana" defaultValue={current?.notes ?? ''} maxLength={500} />
+            <input className="input" name="notes" type="text" maxLength={500} defaultValue={current?.notes ?? ''} />
           </Field>
 
           <button className="btn" type="submit" disabled={saving}>
@@ -826,35 +819,37 @@ function LogView({
         </form>
       </div>
 
-      <div className="card">
-        <h3>📚 Historial</h3>
-        {historyRows.length === 0 ? (
-          <div className="muted">Sin registros todavía.</div>
+      <div className="sect">
+        <p className="eyebrow">Historial</p>
+        {history.length === 0 ? (
+          <p className="dim" style={{ fontSize: 13, marginTop: 12 }}>
+            Sin registros todavía.
+          </p>
         ) : (
-          <table>
+          <table className="kv" style={{ marginTop: 14 }}>
             <thead>
               <tr>
                 <th>Sem</th>
                 <th>Km</th>
                 <th>Dolor</th>
                 <th>Cad</th>
-                <th>Palp</th>
+                <th>Tibia</th>
                 <th>ACWR</th>
               </tr>
             </thead>
             <tbody>
-              {historyRows.map((row) => (
-                <tr key={row.week}>
+              {history.map((r) => (
+                <tr key={r.week}>
                   <td>
-                    <b>S{row.week}</b>
+                    <b>S{String(r.week).padStart(2, '0')}</b>
                   </td>
-                  <td>{row.km ?? '—'} km</td>
-                  <td>{row.pain ?? '—'}/10</td>
-                  <td>{row.cadence ?? '—'}</td>
+                  <td>{r.km ?? '—'}</td>
+                  <td>{r.pain ?? '—'}</td>
+                  <td>{r.cadence ?? '—'}</td>
                   <td>
-                    {row.palpD ?? '—'}/{row.palpI ?? '—'}
+                    {r.palpD ?? '—'}/{r.palpI ?? '—'}
                   </td>
-                  <td>{row.acwr ?? '—'}</td>
+                  <td>{r.acwr ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -862,22 +857,12 @@ function LogView({
         )}
       </div>
 
-      <div className="card">
-        <h3>⚙️ Datos</h3>
-        <div className="tiny" style={{ marginBottom: 10 }}>
-          Tu progreso vive en tu cuenta: entra desde cualquier dispositivo y lo tendrás ahí.
-        </div>
-        <button
-          className="btn"
-          type="button"
-          onClick={handleReset}
-          disabled={saving}
-          style={{
-            background: 'rgba(239,68,68,.12)',
-            color: '#fca5a5',
-            borderColor: 'rgba(239,68,68,.3)',
-          }}
-        >
+      <div className="sect">
+        <p className="eyebrow">Datos</p>
+        <p className="dim" style={{ fontSize: 13, margin: '10px 0 16px', maxWidth: '38ch' }}>
+          Tu progreso vive en tu cuenta. Entra desde cualquier dispositivo y estará ahí.
+        </p>
+        <button className="btn btn-danger" type="button" onClick={reset} disabled={saving}>
           Borrar todo mi progreso
         </button>
       </div>
@@ -887,13 +872,9 @@ function LogView({
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="fld">
+    <div className="field">
       <label>{label}</label>
       {children}
     </div>
   );
-}
-
-function typeClass(type: SessionType): string {
-  return `t${type}`;
 }

@@ -1,10 +1,16 @@
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClientWithUser } from '@/lib/supabase/server';
 import { PlanApp, type LogRow } from '@/components/PlanApp';
+import { normalizeTheme, THEME_COOKIE, type ThemeChoice } from '@/lib/theme';
 
 export const dynamic = 'force-dynamic';
 
 export default async function PlanPage() {
+  const cookieStore = await cookies();
+  const stored = cookieStore.get(THEME_COOKIE)?.value;
+  const theme: ThemeChoice = normalizeTheme(stored) ?? 'system';
+
   const { supabase, user } = await createClientWithUser();
   if (!user) redirect('/login');
 
@@ -45,6 +51,7 @@ export default async function PlanPage() {
       initialDone={done}
       initialLogs={logs}
       serverToday={new Date().toISOString().slice(0, 10)}
+      theme={theme}
     />
   );
 }

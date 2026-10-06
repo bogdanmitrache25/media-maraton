@@ -19,11 +19,19 @@ export default async function LoginPage({
   return (
     <div className="screen">
       <div className="screen-inner">
-        <div className="brand">🏃</div>
-        <h1>Media Maratón 1:50</h1>
-        <p>
-          Plan de 23 semanas y prevención de periostitis tibial. Crea tu cuenta o entra para
-          acceder a tu plan y guardar tu progreso.
+        <p className="eyebrow" style={{ marginBottom: 18 }}>
+          21,097 km · 5:13 /km · 23 semanas
+        </p>
+
+        <h1 className="mark">
+          Media maratón
+          <br />
+          <em>1:50</em>
+        </h1>
+
+        <p className="lede">
+          El plan completo, semana a semana, y el protocolo de prevención de periostitis tibial.
+          Crea tu cuenta y lleva tu progreso desde cualquier dispositivo.
         </p>
 
         <AuthForm next={next} />
