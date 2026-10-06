@@ -3,8 +3,9 @@
 Plan de entrenamiento de 23 semanas para correr una media maratón en 1:50 y prevenir la
 periostitis tibial, convertido en aplicación web multiusuario.
 
-Cada atleta entra con su cuenta de Google, ve su plan y guarda su propio progreso. Nadie ve los
-datos de nadie.
+Cada atleta crea su cuenta, ve su plan y guarda su propio progreso. Nadie ve los datos de nadie.
+
+**Producción:** https://media-maraton-tawny.vercel.app
 
 ---
 
@@ -13,73 +14,66 @@ datos de nadie.
 | Capa | Tecnología |
 |---|---|
 | Framework | Next.js 15 (App Router) + React 19 + TypeScript |
-| Autenticación | Supabase Auth con Google OAuth (flujo PKCE) |
+| Autenticación | Supabase Auth con email y contraseña |
 | Base de datos | Supabase Postgres |
 | Aislamiento de datos | Row Level Security (RLS) |
 | Validación | Zod en servidor |
-| Despliegue | Vercel |
+| Despliegue | Vercel (conectado al repositorio de GitHub) |
 
 ---
 
 ## Seguridad
 
-Esto es lo que hay implementado, y por qué.
-
 ### Autenticación
 
-- **No hay contraseñas.** Google es quien autentica y Supabase quien emite la sesión. No existe
-  ninguna base de datos de contraseñas que se pueda filtrar.
-- **Flujo PKCE.** El `code` de OAuth solo se puede canjear una vez y va firmado.
-- **`getUser()` y nunca `getSession()` en el servidor.** `getUser()` valida el token contra el
-  servidor de auth; `getSession()` se cree lo que le llega en la cookie y es vulnerable a
-  manipulación.
+- **Las contraseñas las gestiona Supabase Auth.** Se almacenan con bcrypt y nunca pasan por
+  nuestro código ni por nuestros logs.
+- **Confirmación de email desactivada** (`mailer_autoconfirm`), para que el registro sea inmediato
+  entre un grupo cerrado de amigos. Si algún día se abre al público, se activa y se configura SMTP.
+- **Longitud mínima de 8 caracteres impuesta en el proveedor**, no solo en el formulario: un
+  cliente manipulado no puede saltársela.
 - **Cookies `httpOnly` + `Secure` + `SameSite=Lax`.** El JavaScript de la página no puede leer el
   token de sesión.
+- **`getUser()` y nunca `getSession()` en el servidor.** `getUser()` valida el token contra el
+  servidor de auth; `getSession()` se cree lo que le llega en la cookie.
 
 ### Aislamiento de datos
 
-- **Row Level Security activo en las cuatro tablas.** Cada política exige
-  `auth.uid() = user_id`. Aunque alguien obtuviera la *anon key* (que es pública por diseño), el
-  motor de base de datos le devolvería cero filas de otros usuarios. El aislamiento no depende del
-  código de la aplicación: vive en Postgres.
-- **GRANT retirados al rol `anon`.** Defensa en profundidad: además de RLS, los permisos a nivel de
-  tabla están revocados para los no autenticados.
-- **La `service_role` key nunca sale del servidor.** Si se usara en el cliente, se saltaría RLS por
-  completo. Aquí solo se emplea, y de forma opcional, para el rate limiter.
+- **Row Level Security activo en las cuatro tablas.** Cada política exige `auth.uid() = user_id`.
+  Aunque alguien obtuviera la *publishable key* (que es pública por diseño), Postgres le devolvería
+  cero filas de otros usuarios. El aislamiento no depende del código de la aplicación: vive en el
+  motor.
+- **GRANT retirados al rol `anon`.** Defensa en profundidad sobre RLS.
+- **La `service_role` key nunca sale del servidor.** Solo se usa, opcionalmente, para el rate
+  limiter.
 
 ### Entrada y salida
 
 - **Validación Zod en el servidor** en todas las Server Actions, además de las restricciones
-  `CHECK` de la base de datos. El cliente nunca es una fuente de confianza.
-- **Comprobación de coherencia de negocio.** No basta con validar tipos: se verifica que la semana
-  y el día existan de verdad y que la sesión sea marcable.
-- **Errores genéricos hacia el navegador.** Los detalles se registran en el servidor, no se
-  devuelven al cliente.
-- **Sin enumeración de usuarios.** No hay formulario de login, así que no hay mensajes que
-  distingan "existe" de "no existe".
+  `CHECK` de la base de datos.
+- **Comprobación de coherencia de negocio:** no basta con validar tipos, se verifica que la semana
+  y el día existan y que la sesión sea marcable.
+- **Errores genéricos hacia el navegador.** Los detalles se registran en el servidor.
 
 ### Red y navegador
 
 - **CSP con nonce por petición** y `strict-dynamic`. Sin `unsafe-inline` en `script-src`. La CSP
-  viaja también en las cabeceras de *petición* para que Next.js aplique el nonce a sus propios
-  scripts.
+  viaja también en las cabeceras de *petición* para que Next.js aplique el nonce a sus scripts.
 - **HSTS** (2 años, `includeSubDomains`, `preload`), **`X-Content-Type-Options: nosniff`**,
-  **`X-Frame-Options: DENY`** y **`frame-ancestors 'none'`** (anti-clickjacking),
-  **`Referrer-Policy`**, **`Permissions-Policy`** y **COOP/CORP**.
+  **`X-Frame-Options: DENY`** y **`frame-ancestors 'none'`**, **`Referrer-Policy`**,
+  **`Permissions-Policy`** y **COOP/CORP**.
 - **Protección de open redirect** en el parámetro `?next=`: solo se aceptan rutas internas.
-- **Rate limiting** por usuario en cada Server Action. Respaldado por Postgres (consistente entre
-  instancias serverless) con reserva en memoria.
-- **Cierre de sesión por POST** con comprobación de `Origin`. Un GET permitiría forzar el logout
-  con un simple `<img src="/auth/signout">`.
-- **Guardia de autenticación en el middleware.** Las páginas protegidas ni siquiera se renderizan
-  para un anónimo.
-- **`noindex` + `robots.txt`.** App privada, fuera de buscadores.
+- **Rate limiting** por usuario en cada Server Action, respaldado en Postgres.
+- **Cierre de sesión por POST** con comprobación de `Origin`.
+- **Guardia de autenticación en el middleware:** las páginas protegidas ni se renderizan para un
+  anónimo.
+- **`noindex` + `robots.txt`.**
 
 ### Secretos
 
-- `.env.local` está en `.gitignore`. **Nunca** se sube.
+- `.env.local` está en `.gitignore` (`.env*`). **Nunca** se sube.
 - Solo las variables `NEXT_PUBLIC_*` llegan al navegador, y son las dos que deben llegar.
-- `.env.example` documenta lo necesario sin contener ningún valor real.
+- `.env.example` documenta lo necesario sin contener valores reales.
 
 ---
 
@@ -89,58 +83,48 @@ Esto es lo que hay implementado, y por qué.
 
 - Node.js 20 o superior
 - Una cuenta de Supabase
-- Una cuenta de Google (para el OAuth)
 
 ### 2. Crear las tablas
 
 En el dashboard de Supabase: **SQL Editor → New query**, pega el contenido de
-`supabase/migrations/0001_init.sql` y pulsa **Run**. El script es idempotente: puedes ejecutarlo
-varias veces sin romper nada.
+`supabase/migrations/0001_init.sql` y pulsa **Run**. Es idempotente.
 
-### 3. Crear las credenciales de Google
+### 3. Activar el acceso con email
 
-1. Ve a [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
-2. **Crear credenciales → ID de cliente de OAuth → Aplicación web**.
-3. En **URIs de redirección autorizados** añade exactamente:
-   ```
-   https://TU-PROYECTO.supabase.co/auth/v1/callback
-   ```
-   (el `TU-PROYECTO` es el de tu proyecto de Supabase, no el dominio de Vercel).
-4. Copia el **Client ID** y el **Client Secret**.
+En Supabase: **Authentication → Sign In / Providers**:
 
-### 4. Conectar Google con Supabase
+- **Email** debe estar habilitado.
+- **Confirm email**: desactivado (para que el registro sea inmediato).
+- **Minimum password length**: 8.
 
-En Supabase: **Authentication → Providers → Google** → actívalo y pega el Client ID y el Client
-Secret del paso anterior.
+O por API:
 
-Luego, en **Authentication → URL Configuration**:
+```bash
+curl -X PATCH "https://api.supabase.com/v1/projects/TU_REF/config/auth" \
+  -H "Authorization: Bearer TU_PERSONAL_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"external_email_enabled":true,"mailer_autoconfirm":true,"password_min_length":8}'
+```
 
-- **Site URL**: la URL de producción (`https://tu-app.vercel.app`)
-- **Redirect URLs**, añade las dos:
-  ```
-  https://tu-app.vercel.app/auth/callback
-  http://localhost:3000/auth/callback
-  ```
-
-### 5. Variables de entorno
+### 4. Variables de entorno
 
 Copia `.env.example` a `.env.local` y rellena:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://TU-PROYECTO.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...   # Settings → API → anon public
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...   # Settings → API Keys
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-La **anon key** es pública por diseño: está protegida por RLS, no por secreto.
+La **publishable key** es pública por diseño: está protegida por RLS, no por secreto.
 
-Opcional, solo si quieres que el rate limiting sea consistente entre instancias:
+Opcional, solo para que el rate limiting sea consistente entre instancias serverless:
 
 ```bash
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...   # Settings → API → service_role. ¡NUNCA en el cliente!
+SUPABASE_SERVICE_ROLE_KEY=...   # ¡NUNCA en el cliente!
 ```
 
-### 6. Arrancar
+### 5. Arrancar
 
 ```bash
 npm install
@@ -153,19 +137,22 @@ Abre http://localhost:3000.
 
 ## Despliegue en Vercel
 
-1. Sube el repositorio a GitHub.
-2. En [vercel.com/new](https://vercel.com/new), importa el repositorio. Vercel detecta Next.js solo.
-3. **Antes de desplegar**, añade las variables de entorno en *Environment Variables*:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `NEXT_PUBLIC_SITE_URL` → `https://tu-proyecto.vercel.app`
-   - `SUPABASE_SERVICE_ROLE_KEY` *(opcional, marca "Sensitive")*
-4. Deploy.
-5. Vuelve a Supabase → **Authentication → URL Configuration** y añade la URL de Vercel en
-   *Site URL* y *Redirect URLs* (paso 4 de arriba). Si no lo haces, el login fallará con
-   `redirect_uri_mismatch`.
-6. En Google Cloud Console, añade también la URL de callback de producción si usas un proyecto de
-   Supabase distinto.
+El repositorio ya está conectado, así que **cada push a `main` despliega solo**. Para hacerlo desde
+la CLI:
+
+```bash
+npx vercel link --yes --project media-maraton
+npx vercel env add NEXT_PUBLIC_SUPABASE_URL production
+npx vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
+npx vercel env add NEXT_PUBLIC_SITE_URL production
+npx vercel deploy --prod
+```
+
+Después, en Supabase → **Authentication → URL Configuration**, añade el dominio de producción:
+
+- **Site URL**: `https://tu-proyecto.vercel.app`
+- **Redirect URLs**: `https://tu-proyecto.vercel.app/auth/callback` y
+  `http://localhost:3000/auth/callback`
 
 ---
 
@@ -176,17 +163,18 @@ app/
   layout.tsx              Layout raíz, metadatos PWA
   globals.css             Estilos
   page.tsx                Raíz: redirige a /plan o /login
-  login/                  Pantalla de entrada + botón de Google
-  auth/callback/          Canje del code de OAuth
+  login/
+    page.tsx              Pantalla de acceso
+    AuthForm.tsx          Formulario de entrar / crear cuenta
   auth/signout/           Cierre de sesión (POST)
   plan/
     page.tsx              Página protegida: carga los datos del usuario
     actions.ts            Server Actions (marcar sesión, guardar registro, resetear)
 components/
-  PlanApp.tsx             Interfaz: pestañas Hoy / Plan / Prevención / Registro
+  PlanApp.tsx             Interfaz: Hoy / Plan / Prevención / Registro
   PreventionTab.tsx       Protocolo de prevención
 lib/
-  plan-data.ts            Las 23 semanas (datos puros, sin dependencias)
+  plan-data.ts            Las 23 semanas (datos puros)
   env.ts                  Validación de variables de entorno
   validation.ts           Esquemas Zod
   rate-limit.ts           Limitador de peticiones
@@ -215,10 +203,20 @@ alguien se registra.
 
 ---
 
+## Limitaciones conocidas
+
+- **Recuperar contraseña**: requiere envío de email. Supabase trae un servicio de desarrollo con
+  límites muy bajos. Para producción hay que configurar SMTP propio (Resend, SendGrid…) en
+  **Authentication → Emails**. Sin eso, un amigo que olvide su contraseña no puede recuperarla.
+- **El registro es abierto**: cualquiera con la URL puede crear una cuenta. Para cerrarlo, activa
+  `disable_signup` y crea las cuentas a mano desde el dashboard.
+
+---
+
 ## Los documentos originales
 
-En `docs/` está el material de partida:
+En `docs/`:
 
-- `guia-completa-media-maraton-v2.md` — el plan original sub-1:15 (se conserva como referencia)
-- `plan-media-maraton-1h50-prevencion.md` — el plan real, con zonas, progresión y protocolo de prevención
+- `guia-completa-media-maraton-v2.md` — el plan original sub-1:15 (referencia)
+- `plan-media-maraton-1h50-prevencion.md` — el plan real, con zonas y protocolo de prevención
 - `calendario-entrenamiento-23-semanas.md` — el calendario día a día
