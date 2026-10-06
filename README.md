@@ -22,6 +22,42 @@ Cada atleta crea su cuenta, ve su plan y guarda su propio progreso. Nadie ve los
 
 ---
 
+## Diseño
+
+La interfaz no es un panel de control: es una **hoja de tiempos**. Papel, tinta, filetes de un
+píxel, cifras grandes y **cero iconos**. El monoespaciado es la voz dominante porque esta
+herramienta es, literalmente, números.
+
+**Paleta.** Dos temas, ambos con el mismo par de materiales:
+
+| | Papel (claro) | Tinta (oscuro) |
+|---|---|---|
+| Fondo | `#EFEBE3` | `#12100D` |
+| Texto | `#17140F` | `#F0EBE1` |
+| Señal | `#B0350F` | `#FF5C2B` |
+
+El color **no** codifica la categoría de sesión, sino la **intensidad** (0-3). La categoría se dice
+con tipografía: `FONDO`, `CALIDAD`, `CRUCE`, `FUERZA`, `LIBRE`, `TEST`, `CARRERA`.
+
+Los grises están calibrados para superar **WCAG AA** sobre su fondo real (la letra mono de 10-11 px
+es la voz de la interfaz, no puede ser un gris decorativo). Verificado con medición automática de
+ratios en ambos temas.
+
+**Elemento firma.** Las 23 semanas del plan son una tira de barras en la cabecera que se van
+llenando a lo largo de cinco meses. Cada semana deja su muesca aunque esté a cero, de modo que la
+tira se lee como una regla de medición y no como una fila de cajas vacías.
+
+**Tema sin parpadeo.** La preferencia viaja en una cookie (`mm-theme`) y se resuelve **en el
+servidor**, así que `data-theme` está en el primer byte de HTML. No se usa `localStorage` ni un
+script inline: nuestra CSP es estricta con nonce y bloquearía el inline. Si no hay cookie manda la
+preferencia del sistema.
+
+**Detalles de iOS.** `100dvh` con respaldo `100vh`, `env(safe-area-inset-*)` en cabecera y raíl,
+objetivos táctiles de 52 px, `-webkit-text-size-adjust: 100%`, `overscroll-behavior: contain`,
+`viewport-fit: cover` y **campos a 16 px** — por debajo de eso Safari hace zoom al enfocar.
+
+---
+
 ## Seguridad
 
 ### Autenticación
@@ -148,11 +184,9 @@ npx vercel env add NEXT_PUBLIC_SITE_URL production
 npx vercel deploy --prod
 ```
 
-Después, en Supabase → **Authentication → URL Configuration**, añade el dominio de producción:
-
-- **Site URL**: `https://tu-proyecto.vercel.app`
-- **Redirect URLs**: `https://tu-proyecto.vercel.app/auth/callback` y
-  `http://localhost:3000/auth/callback`
+Después, en Supabase → **Authentication → URL Configuration**, pon el dominio de producción como
+**Site URL**. Con email y contraseña no hacen falta *Redirect URLs*: no hay ida y vuelta a un
+proveedor externo.
 
 ---
 
@@ -160,8 +194,9 @@ Después, en Supabase → **Authentication → URL Configuration**, añade el do
 
 ```
 app/
-  layout.tsx              Layout raíz, metadatos PWA
-  globals.css             Estilos
+  layout.tsx              Layout raíz, fuentes, metadatos PWA, tema desde cookie
+  globals.css             Sistema de diseño completo (tokens + primitivas)
+  theme-actions.ts        Server Action que guarda el tema en cookie
   page.tsx                Raíz: redirige a /plan o /login
   login/
     page.tsx              Pantalla de acceso
@@ -171,10 +206,12 @@ app/
     page.tsx              Página protegida: carga los datos del usuario
     actions.ts            Server Actions (marcar sesión, guardar registro, resetear)
 components/
-  PlanApp.tsx             Interfaz: Hoy / Plan / Prevención / Registro
+  PlanApp.tsx             Interfaz: Hoy / Plan / Protección / Registro
   PreventionTab.tsx       Protocolo de prevención
+  ThemeToggle.tsx         Conmutador papel / tinta
 lib/
   plan-data.ts            Las 23 semanas (datos puros)
+  theme.ts                Constante y tipos del tema
   env.ts                  Validación de variables de entorno
   validation.ts           Esquemas Zod
   rate-limit.ts           Limitador de peticiones
