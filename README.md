@@ -154,7 +154,8 @@ adicional. Se puede copiar al portapapeles o descargar como `.md`.
 En el dashboard de Supabase: **SQL Editor → New query**, pega el contenido de
 `supabase/migrations/0001_init.sql` y pulsa **Run**. Es idempotente.
 
-Después, lo mismo con `supabase/migrations/0002_session_overrides.sql`.
+Después, lo mismo con `supabase/migrations/0002_session_overrides.sql` y
+`supabase/migrations/0003_daily_digest.sql`.
 
 ### 3. Activar el acceso con email
 
@@ -221,6 +222,42 @@ proveedor externo.
 
 ---
 
+## Correo diario
+
+Cada mañana a las **5:30 (Europe/Madrid)** la app envía un correo con la sesión que toca ese día.
+Es una preferencia **por usuario y desactivada por defecto**: la app es multiusuario y nadie recibe
+correo sin pedirlo. Se activa desde Registro, en el bloque de cuenta.
+
+### El problema del horario de verano
+
+Vercel programa los cron en **UTC** y no entiende de cambios de hora. Un solo cron a las 3:30 UTC
+daría las 5:30 en verano pero las 4:30 en invierno. Por eso hay **dos disparos diarios** —3:30 y
+4:30 UTC, ver `vercel.json`— y la ruta decide cuál es el bueno consultando la hora real de Madrid:
+
+- Verano (UTC+2): dispara el de las 3:30 UTC → 5:30 local.
+- Invierno (UTC+1): dispara el de las 4:30 UTC → 5:30 local.
+
+El pestillo `profiles.digest_sent_on` garantiza que solo salga **un correo al día** aunque los dos
+disparos caigan dentro de la ventana. Se marca **después** de enviar, así que un fallo se reintenta
+en el siguiente disparo en lugar de perderse.
+
+### Seguridad
+
+- La ruta del cron está **abierta en el middleware** (no tiene sesión de usuario) pero se protege
+  con `CRON_SECRET`, que Vercel envía en la cabecera `Authorization` de cada disparo.
+- **Falla en cerrado:** sin `CRON_SECRET` configurado responde 500 y no envía nada. Si no, cualquiera
+  podría usar la cuenta de Resend como altavoz.
+- Es el **único sitio** donde se usa la `service_role` key, porque el cron necesita leer los perfiles
+  de todos los atletas y no hay sesión que pase por RLS. Toda escritura se acota por `user_id`.
+
+### Sin dominio verificado
+
+Con el remitente por defecto (`onboarding@resend.dev`) Resend **solo entrega al correo dueño de la
+cuenta**. Para enviar a otros destinatarios hay que verificar un dominio en Resend y ajustar
+`DIGEST_FROM`.
+
+---
+
 ## Estructura
 
 ```
@@ -228,6 +265,7 @@ app/
   layout.tsx              Layout raíz, fuentes, metadatos PWA, tema desde cookie
   globals.css             Sistema de diseño completo (tokens + primitivas)
   theme-actions.ts        Server Action que guarda el tema en cookie
+  api/cron/digest/        Correo diario (protegido con CRON_SECRET)
   page.tsx                Raíz: redirige a /plan o /login
   login/
     page.tsx              Pantalla de acceso
@@ -244,12 +282,15 @@ lib/
   plan-data.ts            Las 23 semanas (datos puros)
   export.ts               Informe en Markdown para pasar a una IA
   theme.ts                Constante y tipos del tema
+  email/digest.ts         Construye el correo diario (HTML y texto)
+  email/resend.ts         Envío por la API HTTP de Resend
   env.ts                  Validación de variables de entorno
   validation.ts           Esquemas Zod
   rate-limit.ts           Limitador de peticiones
   url.ts                  Protección de open redirect
-  supabase/               Clientes de servidor, navegador y middleware
+  supabase/               Clientes de servidor, navegador, admin y middleware
 supabase/migrations/      Esquema SQL + RLS
+vercel.json               Los dos cron del correo diario
 docs/                     Los documentos originales del plan
 legacy/                   La versión anterior en un solo HTML
 scripts/make-icon.ps1     Genera los iconos de la PWA
