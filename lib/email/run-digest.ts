@@ -1,26 +1,28 @@
+/**
+ * Lógica del correo diario, compartida por las dos rutas de cron.
+ *
+ * Vive aquí y no en una ruta porque Vercel **solo admite un cron por ruta**:
+ * declarar dos veces la misma ruta con horarios distintos hace que registre una
+ * y descarte la otra. Así que hay dos rutas —una por cada horario— y las dos
+ * llaman a esto.
+ */
+
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { buildDigest } from '@/lib/email/digest';
 import { sendEmail } from '@/lib/email/resend';
-import {
-  PHASES,
-  dayIndexIn,
-  isCountable,
-  weekOfDate,
-  weekTotal,
-} from '@/lib/plan-data';
-
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+import { PHASES, dayIndexIn, isCountable, weekOfDate, weekTotal } from '@/lib/plan-data';
 
 /**
- * Correo diario con el plan del día.
+ * Horario objetivo: 5:30 en Europe/Madrid.
  *
- * Horario: 5:30 en Europe/Madrid. Vercel programa los cron en UTC y **no
- * entiende de horario de verano**, así que hay dos disparos diarios —ver
- * `vercel.json`— y aquí se decide cuál es el bueno. El pestillo
- * `digest_sent_on` garantiza que solo salga un correo por día aunque los dos
- * disparos lleguen dentro de la ventana.
+ * Vercel programa los cron en UTC y no entiende de cambios de hora. Un único
+ * disparo daría las 5:30 en verano y las 4:30 en invierno, así que hay dos:
+ *
+ *   - `/api/cron/digest-summer` a las 3:30 UTC → 5:30 en verano (UTC+2)
+ *   - `/api/cron/digest-winter` a las 4:30 UTC → 5:30 en invierno (UTC+1)
+ *
+ * El que no toca cae fuera de la ventana y no hace nada.
  */
 const TARGET_HOUR = 5;
 const WINDOW_FROM_MINUTE = 25;
@@ -28,10 +30,8 @@ const WINDOW_TO_MINUTE = 59;
 
 const TIME_ZONE = 'Europe/Madrid';
 
-type MadridNow = { dateISO: string; hour: number; minute: number };
-
-/** Hora local de Madrid, calculada con la base de datos de zonas horarias. */
-function madridNow(): MadridNow {
+/** Hora local de Madrid, resuelta con la base de datos de zonas horarias. */
+function madridNow(): { dateISO: string; hour: number; minute: number } {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: TIME_ZONE,
     year: 'numeric',
@@ -52,17 +52,17 @@ function madridNow(): MadridNow {
   };
 }
 
-export async function GET(request: Request) {
+export async function runDigest(request: Request): Promise<NextResponse> {
   /* ---------------------------------------------------------------- */
-  /* 1. Autorización. Sin secreto configurado NO se envía nada.        */
+  /* 1. Autorización. Sin secreto configurado NO se envía nada.         */
   /* ---------------------------------------------------------------- */
   const secret = process.env.CRON_SECRET;
   const header = request.headers.get('authorization') ?? '';
 
   if (!secret) {
-    // Fallar cerrado: si nadie ha puesto el secreto, cualquiera podría llamar
-    // a esta ruta y usar la cuenta de Resend como altavoz.
-    console.error('[cron/digest] CRON_SECRET no está configurado. No se envía nada.');
+    // Fallar cerrado: si nadie puso el secreto, cualquiera podría llamar a esta
+    // ruta y usar la cuenta de Resend como altavoz.
+    console.error('[digest] CRON_SECRET no está configurado. No se envía nada.');
     return NextResponse.json({ ok: false, error: 'Cron no configurado.' }, { status: 500 });
   }
 
@@ -70,8 +70,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: 'No autorizado.' }, { status: 401 });
   }
 
-  const url = new URL(request.url);
-  const force = url.searchParams.get('force') === '1';
+  const force = new URL(request.url).searchParams.get('force') === '1';
 
   /* ---------------------------------------------------------------- */
   /* 2. ¿Es la hora?                                                    */
@@ -83,29 +82,22 @@ export async function GET(request: Request) {
     now.minute <= WINDOW_TO_MINUTE;
 
   if (!inWindow && !force) {
-    return NextResponse.json({
-      ok: true,
-      skipped: `fuera de ventana (Madrid ${String(now.hour).padStart(2, '0')}:${String(now.minute).padStart(2, '0')})`,
-    });
+    const hh = String(now.hour).padStart(2, '0');
+    const mm = String(now.minute).padStart(2, '0');
+    return NextResponse.json({ ok: true, skipped: `fuera de ventana (Madrid ${hh}:${mm})` });
   }
 
   /* ---------------------------------------------------------------- */
   /* 3. ¿Qué toca hoy?                                                  */
   /* ---------------------------------------------------------------- */
   const week = weekOfDate(now.dateISO);
-  if (!week) {
-    return NextResponse.json({ ok: true, skipped: 'hoy no cae dentro del plan' });
-  }
+  if (!week) return NextResponse.json({ ok: true, skipped: 'hoy no cae dentro del plan' });
 
   const dayIndex = dayIndexIn(week, now.dateISO);
-  if (dayIndex < 0) {
-    return NextResponse.json({ ok: true, skipped: 'día fuera de rango' });
-  }
+  if (dayIndex < 0) return NextResponse.json({ ok: true, skipped: 'día fuera de rango' });
 
   const baseDay = week.days[dayIndex];
-  if (!baseDay) {
-    return NextResponse.json({ ok: true, skipped: 'sesión inexistente' });
-  }
+  if (!baseDay) return NextResponse.json({ ok: true, skipped: 'sesión inexistente' });
 
   const phase = PHASES[week.phase];
   const total = weekTotal(week);
@@ -113,7 +105,7 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
 
   /* ---------------------------------------------------------------- */
-  /* 4. Destinatarios: solo quien lo ha activado y no lo ha recibido    */
+  /* 4. Destinatarios: quien lo activó y no lo ha recibido hoy          */
   /* ---------------------------------------------------------------- */
   const { data: profiles, error: profilesError } = await admin
     .from('profiles')
@@ -121,12 +113,14 @@ export async function GET(request: Request) {
     .eq('digest_enabled', true);
 
   if (profilesError) {
-    console.error('[cron/digest] profiles:', profilesError.message);
-    return NextResponse.json({ ok: false, error: 'No se pudieron leer los perfiles.' }, { status: 500 });
+    console.error('[digest] profiles:', profilesError.message);
+    return NextResponse.json(
+      { ok: false, error: 'No se pudieron leer los perfiles.' },
+      { status: 500 },
+    );
   }
 
   const pending = (profiles ?? []).filter((p) => p.digest_sent_on !== now.dateISO);
-
   if (!pending.length) {
     return NextResponse.json({ ok: true, sent: 0, reason: 'nadie pendiente' });
   }
@@ -138,8 +132,11 @@ export async function GET(request: Request) {
   });
 
   if (usersError) {
-    console.error('[cron/digest] listUsers:', usersError.message);
-    return NextResponse.json({ ok: false, error: 'No se pudieron leer los usuarios.' }, { status: 500 });
+    console.error('[digest] listUsers:', usersError.message);
+    return NextResponse.json(
+      { ok: false, error: 'No se pudieron leer los usuarios.' },
+      { status: 500 },
+    );
   }
 
   const emailById = new Map<string, string>();
@@ -148,7 +145,7 @@ export async function GET(request: Request) {
   }
 
   /* ---------------------------------------------------------------- */
-  /* 5. Sustituciones y progreso de esta semana, dos consultas          */
+  /* 5. Sustituciones y progreso de hoy, dos consultas                  */
   /* ---------------------------------------------------------------- */
   const { data: overrides } = await admin
     .from('session_overrides')
@@ -225,23 +222,23 @@ export async function GET(request: Request) {
     const sent = await sendEmail({ to, ...digest });
 
     if (sent.ok) {
-      // El pestillo se marca DESPUÉS de enviar: si el envío falla, el siguiente
+      // El pestillo se marca DESPUÉS de enviar: si el envío falla, el otro
       // disparo del día lo reintenta.
       const { error: markError } = await admin
         .from('profiles')
         .update({ digest_sent_on: now.dateISO })
         .eq('id', profile.id);
 
-      if (markError) console.error('[cron/digest] marca:', markError.message);
+      if (markError) console.error('[digest] marca:', markError.message);
     } else {
-      console.error('[cron/digest] envío:', to, sent.error);
+      console.error('[digest] envío:', to, sent.error);
     }
 
     results.push({ to, ok: sent.ok, detail: sent.ok ? 'enviado' : sent.error });
   }
 
   const sentCount = results.filter((r) => r.ok).length;
-  console.log(`[cron/digest] ${now.dateISO} · ${sentCount}/${results.length} enviados`);
+  console.log(`[digest] ${now.dateISO} · ${sentCount}/${results.length} enviados`);
 
   return NextResponse.json({ ok: true, date: now.dateISO, sent: sentCount, results });
 }

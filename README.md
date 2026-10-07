@@ -231,11 +231,20 @@ correo sin pedirlo. Se activa desde Registro, en el bloque de cuenta.
 ### El problema del horario de verano
 
 Vercel programa los cron en **UTC** y no entiende de cambios de hora. Un solo cron a las 3:30 UTC
-daría las 5:30 en verano pero las 4:30 en invierno. Por eso hay **dos disparos diarios** —3:30 y
-4:30 UTC, ver `vercel.json`— y la ruta decide cuál es el bueno consultando la hora real de Madrid:
+daría las 5:30 en verano pero las 4:30 en invierno. Por eso hay **dos rutas**, cada una con su
+horario:
 
-- Verano (UTC+2): dispara el de las 3:30 UTC → 5:30 local.
-- Invierno (UTC+1): dispara el de las 4:30 UTC → 5:30 local.
+| Ruta | Cron (UTC) | Envía cuando |
+|---|---|---|
+| `/api/cron/digest-summer` | `30 3 * * *` | Horario de verano (UTC+2) → 5:30 en Madrid |
+| `/api/cron/digest-winter` | `30 4 * * *` | Horario de invierno (UTC+1) → 5:30 en Madrid |
+
+El disparo que no toca cae fuera de la ventana y no hace nada. Las dos rutas son envoltorios finos
+sobre `lib/email/run-digest.ts`.
+
+**Son dos rutas y no dos cron sobre la misma ruta a propósito:** Vercel solo admite una entrada de
+cron por path. Si declaras la misma ruta dos veces, registra una y descarta la otra en silencio, y
+el cambio de hora deja de funcionar.
 
 El pestillo `profiles.digest_sent_on` garantiza que solo salga **un correo al día** aunque los dos
 disparos caigan dentro de la ventana. Se marca **después** de enviar, así que un fallo se reintenta
