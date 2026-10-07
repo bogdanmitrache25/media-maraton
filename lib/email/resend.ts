@@ -24,11 +24,46 @@ function sender(): string {
   return process.env.DIGEST_FROM ?? 'Media Maratón 1:50 <onboarding@resend.dev>';
 }
 
+/**
+ * Dirección de respuesta y de baja.
+ *
+ * Se toma del primer destinatario de la lista blanca: en esta app el correo
+ * llega a su dueño, así que responder o pedir la baja le llega a él y no a una
+ * dirección muerta de Resend.
+ */
+function replyAddress(): string | null {
+  const list = process.env.DIGEST_RECIPIENTS?.trim();
+  if (!list) return null;
+  return list.split(',')[0]?.trim() || null;
+}
+
+/**
+ * Cabeceras que Gmail valora en el correo recurrente.
+ *
+ * `List-Unsubscribe` es la forma estándar de decir "esto es un envío periódico
+ * que pediste y puedes dejar". Sin él, un correo diario parece sospechoso
+ * porque no ofrece ninguna salida. Va solo con `mailto:` a propósito: la
+ * variante de un clic exige un endpoint HTTPS que reciba un POST, y prometer
+ * algo que no existe es peor que no ofrecerlo.
+ */
+function extraHeaders(): Record<string, string> | undefined {
+  const reply = replyAddress();
+  if (!reply) return undefined;
+
+  const subject = encodeURIComponent('Baja del correo diario');
+  return {
+    'List-Unsubscribe': `<mailto:${reply}?subject=${subject}>`,
+  };
+}
+
 export async function sendEmail(email: Email): Promise<SendResult> {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { ok: false, error: 'Falta RESEND_API_KEY.' };
 
   try {
+    const reply = replyAddress();
+    const headers = extraHeaders();
+
     const res = await fetch(ENDPOINT, {
       method: 'POST',
       headers: {
@@ -41,6 +76,8 @@ export async function sendEmail(email: Email): Promise<SendResult> {
         subject: email.subject,
         html: email.html,
         text: email.text,
+        ...(reply ? { reply_to: reply } : {}),
+        ...(headers ? { headers } : {}),
       }),
     });
 

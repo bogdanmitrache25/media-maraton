@@ -58,6 +58,18 @@ function longDate(iso: string): string {
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
+/**
+ * Asunto del correo.
+ *
+ * Cuando el título del plan ya empieza por el propio código —"Calidad · 3 km"
+ * con código CALIDAD— repetirlo suena a error. En ese caso se omite.
+ */
+function subjectLine(weekLabel: string, code: string, title: string, isRest: boolean): string {
+  if (isRest) return `${weekLabel} · LIBRE — Descanso total`;
+  const redundant = title.trim().toLowerCase().startsWith(code.toLowerCase());
+  return redundant ? `${weekLabel} — ${title}` : `${weekLabel} · ${code} — ${title}`;
+}
+
 export function buildDigest(input: DigestInput): {
   subject: string;
   html: string;
@@ -83,9 +95,7 @@ export function buildDigest(input: DigestInput): {
   const weekLabel = `S${pad(week)}`;
   const dateLabel = longDate(dateISO);
 
-  const subject = isRest
-    ? `${weekLabel} · LIBRE — Descanso total`
-    : `${weekLabel} · ${code} — ${session.title}`;
+  const subject = subjectLine(weekLabel, code, session.title, isRest);
 
   /* ------------------------------------------------------------------ */
   /* Texto plano: el que leen los relojes, los asistentes y los filtros  */
