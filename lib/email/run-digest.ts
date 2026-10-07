@@ -30,6 +30,27 @@ const WINDOW_TO_MINUTE = 59;
 
 const TIME_ZONE = 'Europe/Madrid';
 
+/**
+ * Lista blanca de destinatarios, opcional.
+ *
+ * Sin un dominio verificado en Resend solo se puede entregar al correo del
+ * titular de la cuenta. Mientras siga así, esta variable evita el peor
+ * escenario: que un amigo active el interruptor, el correo salga, Resend lo
+ * rechace y él se quede esperando algo que nunca va a llegar sin saber por qué.
+ *
+ * Si está vacía, manda la lógica por usuario de siempre.
+ */
+function allowedRecipients(): Set<string> | null {
+  const raw = process.env.DIGEST_RECIPIENTS?.trim();
+  if (!raw) return null;
+  return new Set(
+    raw
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
 /** Hora local de Madrid, resuelta con la base de datos de zonas horarias. */
 function madridNow(): { dateISO: string; hour: number; minute: number } {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -242,11 +263,17 @@ export async function runDigest(request: Request): Promise<NextResponse> {
   /* 6. Enviar                                                          */
   /* ---------------------------------------------------------------- */
   const results: Array<{ to: string; ok: boolean; detail: string }> = [];
+  const allowed = allowedRecipients();
 
   for (const profile of pending) {
     const to = emailById.get(profile.id);
     if (!to) {
       results.push({ to: profile.id, ok: false, detail: 'sin email' });
+      continue;
+    }
+
+    if (allowed && !allowed.has(to.toLowerCase())) {
+      results.push({ to, ok: false, detail: 'fuera de la lista blanca' });
       continue;
     }
 

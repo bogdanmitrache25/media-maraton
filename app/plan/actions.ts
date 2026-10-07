@@ -226,6 +226,29 @@ export async function setDigestEnabled(input: unknown): Promise<ActionResult> {
   const parsed = digestPrefSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: 'Datos no válidos.' };
 
+  /*
+   * Sin dominio verificado en Resend solo se entrega al correo del titular de
+   * la cuenta. Si hay lista blanca y este atleta no está en ella, activar el
+   * interruptor no le daría nada: preferimos decírselo a dejarle esperando un
+   * correo que nunca va a llegar.
+   */
+  if (parsed.data.enabled) {
+    const raw = process.env.DIGEST_RECIPIENTS?.trim();
+    if (raw) {
+      const list = raw
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean);
+      const email = (user.email ?? '').toLowerCase();
+      if (!list.includes(email)) {
+        return {
+          ok: false,
+          error: 'De momento el correo diario solo llega a la dirección principal.',
+        };
+      }
+    }
+  }
+
   if (!(await rateLimit(`digest:${user.id}`, 30, 60))) {
     return { ok: false, error: RATE_LIMIT_ERROR };
   }
