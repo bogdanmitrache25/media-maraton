@@ -1367,6 +1367,30 @@ select.input {
 /* --------------------------------------------------------------------------
    9.7 PREFERENCIAS
    -------------------------------------------------------------------------- */
+/* Nombre editable: el campo y su botón en la misma línea, alineados por abajo
+   porque el campo lleva etiqueta encima y el botón no. */
+.name-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.name-row .btn {
+  width: auto;
+  padding: 0 20px;
+}
+
+@media (max-width: 360px) {
+  .name-row {
+    grid-template-columns: 1fr;
+  }
+
+  .name-row .btn {
+    width: 100%;
+  }
+}
+
 .pref {
   display: grid;
   grid-template-columns: 1fr auto;

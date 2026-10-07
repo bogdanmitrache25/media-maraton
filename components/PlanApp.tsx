@@ -7,6 +7,8 @@ import {
   saveSessionOverride,
   saveWeeklyLog,
   setDigestEnabled,
+  // Se renombra: `setDisplayName` ya es el setter del estado local.
+  setDisplayName as saveDisplayName,
   toggleSession,
 } from '@/app/plan/actions';
 import { PreventionTab } from '@/components/PreventionTab';
@@ -110,6 +112,8 @@ export function PlanApp({
   const [toast, setToast] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ week: number; day: number } | null>(null);
   const [digest, setDigest] = useState(initialDigest);
+  const [displayName, setDisplayName] = useState(user.name);
+  const [savingName, setSavingName] = useState(false);
   /*
    * Qué fila acaba de cambiar. La animación de marcado debe dispararse una sola
    * vez, al pulsar, y no cada vez que la lista se vuelve a pintar: si no, al
@@ -266,9 +270,33 @@ export function PlanApp({
   );
 
   const report = useCallback(
-    () => buildTrainingReport({ name: user.name, today, done, overrides, logs }),
-    [user.name, today, done, overrides, logs],
+    () => buildTrainingReport({ name: displayName, today, done, overrides, logs }),
+    [displayName, today, done, overrides, logs],
   );
+
+  const handleName = useCallback(async () => {
+    const clean = displayName.trim();
+    if (!clean || clean === user.name) {
+      setDisplayName(user.name);
+      return;
+    }
+    setSavingName(true);
+    try {
+      const res = await saveDisplayName({ name: clean });
+      if (!res.ok) {
+        setDisplayName(user.name);
+        showToast(res.error);
+      } else {
+        setDisplayName(clean);
+        showToast('Nombre guardado');
+      }
+    } catch {
+      setDisplayName(user.name);
+      showToast('Sin conexión. Inténtalo de nuevo.');
+    } finally {
+      setSavingName(false);
+    }
+  }, [displayName, user.name, showToast]);
 
   const handleDigest = useCallback(async () => {
     const next = !digest;
@@ -297,7 +325,7 @@ export function PlanApp({
             <p className="wordmark">
               MM <em>1:50</em>
             </p>
-            <p className="hdr-sub">14 MAR 2027 · {user.name}</p>
+            <p className="hdr-sub">14 MAR 2027 · {displayName}</p>
           </div>
           <ThemeToggle initial={theme} />
         </div>
@@ -381,6 +409,33 @@ export function PlanApp({
           <p className="eyebrow">Cuenta</p>
           <p className="num soft" style={{ fontSize: 12, margin: '10px 0 18px' }}>
             {user.email}
+          </p>
+
+          <div className="name-row">
+            <div className="field">
+              <label htmlFor="display-name">Cómo te llamas</label>
+              <input
+                id="display-name"
+                className="input"
+                type="text"
+                maxLength={40}
+                autoComplete="name"
+                placeholder="Tu nombre"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+              />
+            </div>
+            <button
+              className="btn"
+              type="button"
+              onClick={handleName}
+              disabled={savingName || displayName.trim() === user.name}
+            >
+              {savingName ? '…' : 'Guardar'}
+            </button>
+          </div>
+          <p className="pref-d" style={{ marginBottom: 18 }}>
+            Es el nombre que aparece en el saludo del correo diario.
           </p>
 
           <div className="pref">

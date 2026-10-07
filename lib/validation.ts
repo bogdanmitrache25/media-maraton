@@ -68,6 +68,19 @@ export const digestPrefSchema = z.object({
 });
 
 /**
+ * Nombre del atleta. Es lo que aparece en el saludo del correo diario, así que
+ * se guarda tal cual lo escriba, sin inventar nada.
+ */
+export const displayNameSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Escribe tu nombre')
+    // La columna admite hasta 80; 40 deja margen de sobra para un nombre real.
+    .max(40, 'Como máximo 40 caracteres'),
+});
+
+/**
  * Convierte un valor de `FormData` en número o `null`.
  * Cadena vacía, ausente o no numérica → `null` (no cero).
  */

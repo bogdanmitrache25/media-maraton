@@ -6,6 +6,7 @@ import { rateLimit } from '@/lib/rate-limit';
 import {
   clearOverrideSchema,
   digestPrefSchema,
+  displayNameSchema,
   sessionOverrideSchema,
   toNumberOrNull,
   toggleSessionSchema,
@@ -208,6 +209,38 @@ export async function clearSessionOverride(input: unknown): Promise<ActionResult
 
   if (error) {
     console.error('[clearSessionOverride]', error.message);
+    return { ok: false, error: GENERIC_ERROR };
+  }
+
+  revalidatePath('/plan');
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Nombre del atleta                                                          */
+/* -------------------------------------------------------------------------- */
+
+export async function setDisplayName(input: unknown): Promise<ActionResult> {
+  const { supabase, user } = await createClientWithUser();
+  if (!user) return { ok: false, error: 'Tu sesión ha caducado. Vuelve a entrar.' };
+
+  const parsed = displayNameSchema.safeParse(input);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return { ok: false, error: first ? first.message : 'Datos no válidos.' };
+  }
+
+  if (!(await rateLimit(`name:${user.id}`, 20, 60))) {
+    return { ok: false, error: RATE_LIMIT_ERROR };
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ display_name: parsed.data.name })
+    .eq('id', user.id);
+
+  if (error) {
+    console.error('[setDisplayName]', error.message);
     return { ok: false, error: GENERIC_ERROR };
   }
 
