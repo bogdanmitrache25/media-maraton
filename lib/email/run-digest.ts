@@ -70,7 +70,8 @@ export async function runDigest(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: 'No autorizado.' }, { status: 401 });
   }
 
-  const force = new URL(request.url).searchParams.get('force') === '1';
+  const params = new URL(request.url).searchParams;
+  const force = params.get('force') === '1';
 
   /* ---------------------------------------------------------------- */
   /* 2. ¿Es la hora?                                                    */
@@ -87,13 +88,23 @@ export async function runDigest(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: true, skipped: `fuera de ventana (Madrid ${hh}:${mm})` });
   }
 
-  /* ---------------------------------------------------------------- */
-  /* 3. ¿Qué toca hoy?                                                  */
-  /* ---------------------------------------------------------------- */
-  const week = weekOfDate(now.dateISO);
-  if (!week) return NextResponse.json({ ok: true, skipped: 'hoy no cae dentro del plan' });
+  /*
+   * Modo vista previa: `?preview=YYYY-MM-DD` devuelve lo que se enviaría ese
+   * día, sin enviar nada ni tocar el pestillo. Sirve para comprobar el
+   * contenido y, sobre todo, para verificar que los días de descanso también
+   * generan correo.
+   */
+  const previewRaw = params.get('preview');
+  const previewDate = previewRaw && /^\d{4}-\d{2}-\d{2}$/.test(previewRaw) ? previewRaw : null;
+  const dateISO = previewDate ?? now.dateISO;
 
-  const dayIndex = dayIndexIn(week, now.dateISO);
+  /* ---------------------------------------------------------------- */
+  /* 3. ¿Qué toca ese día?                                              */
+  /* ---------------------------------------------------------------- */
+  const week = weekOfDate(dateISO);
+  if (!week) return NextResponse.json({ ok: true, skipped: 'ese día no cae dentro del plan' });
+
+  const dayIndex = dayIndexIn(week, dateISO);
   if (dayIndex < 0) return NextResponse.json({ ok: true, skipped: 'día fuera de rango' });
 
   const baseDay = week.days[dayIndex];
@@ -101,6 +112,49 @@ export async function runDigest(request: Request): Promise<NextResponse> {
 
   const phase = PHASES[week.phase];
   const total = weekTotal(week);
+  const appUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://media-maraton-tawny.vercel.app';
+
+  /** Arma el correo de este día para un atleta. Mismo camino en envío y vista previa. */
+  const compose = (
+    name: string,
+    over?: { title: string; note: string | null },
+    weekDone = 0,
+  ) =>
+    buildDigest({
+      name,
+      dateISO,
+      week: week.n,
+      dayIndex,
+      phaseName: phase.name,
+      focus: week.focus,
+      km: week.km === 'carrera' ? '' : week.km,
+      session: over
+        ? {
+            type: baseDay.type,
+            title: over.title,
+            desc: over.note ?? '',
+            overridden: baseDay.title,
+          }
+        : { type: baseDay.type, title: baseDay.title, desc: baseDay.desc, overridden: null },
+      isRest: !isCountable(baseDay.type),
+      weekDone,
+      weekTotal: total,
+      appUrl,
+    });
+
+  if (previewDate) {
+    const sample = compose('Atleta');
+    return NextResponse.json({
+      ok: true,
+      preview: true,
+      date: dateISO,
+      week: week.n,
+      dayIndex,
+      esDescanso: !isCountable(baseDay.type),
+      subject: sample.subject,
+      text: sample.text,
+    });
+  }
 
   const admin = createAdminClient();
 
@@ -184,7 +238,6 @@ export async function runDigest(request: Request): Promise<NextResponse> {
   /* ---------------------------------------------------------------- */
   /* 6. Enviar                                                          */
   /* ---------------------------------------------------------------- */
-  const appUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://media-maraton-tawny.vercel.app';
   const results: Array<{ to: string; ok: boolean; detail: string }> = [];
 
   for (const profile of pending) {
@@ -195,29 +248,11 @@ export async function runDigest(request: Request): Promise<NextResponse> {
     }
 
     const over = overrideByUser.get(profile.id);
-    const session = over
-      ? {
-          type: baseDay.type,
-          title: over.title,
-          desc: over.note ?? '',
-          overridden: baseDay.title,
-        }
-      : { type: baseDay.type, title: baseDay.title, desc: baseDay.desc, overridden: null };
-
-    const digest = buildDigest({
-      name: profile.display_name || to.split('@')[0] || 'atleta',
-      dateISO: now.dateISO,
-      week: week.n,
-      dayIndex,
-      phaseName: phase.name,
-      focus: week.focus,
-      km: week.km === 'carrera' ? '' : week.km,
-      session,
-      isRest: !isCountable(baseDay.type),
-      weekDone: weekProgress(profile.id),
-      weekTotal: total,
-      appUrl,
-    });
+    const digest = compose(
+      profile.display_name || to.split('@')[0] || 'atleta',
+      over,
+      weekProgress(profile.id),
+    );
 
     const sent = await sendEmail({ to, ...digest });
 
@@ -226,7 +261,7 @@ export async function runDigest(request: Request): Promise<NextResponse> {
       // disparo del día lo reintenta.
       const { error: markError } = await admin
         .from('profiles')
-        .update({ digest_sent_on: now.dateISO })
+        .update({ digest_sent_on: dateISO })
         .eq('id', profile.id);
 
       if (markError) console.error('[digest] marca:', markError.message);
