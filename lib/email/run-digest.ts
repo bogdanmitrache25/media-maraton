@@ -73,6 +73,15 @@ export async function runDigest(request: Request): Promise<NextResponse> {
   const params = new URL(request.url).searchParams;
   const force = params.get('force') === '1';
 
+  /*
+   * Modo vista previa: `?preview=YYYY-MM-DD` devuelve lo que se enviaría ese
+   * día, sin enviar nada ni tocar el pestillo. Sirve para comprobar el
+   * contenido y, sobre todo, para verificar que los días de descanso también
+   * generan correo.
+   */
+  const previewRaw = params.get('preview');
+  const previewDate = previewRaw && /^\d{4}-\d{2}-\d{2}$/.test(previewRaw) ? previewRaw : null;
+
   /* ---------------------------------------------------------------- */
   /* 2. ¿Es la hora?                                                    */
   /* ---------------------------------------------------------------- */
@@ -82,20 +91,14 @@ export async function runDigest(request: Request): Promise<NextResponse> {
     now.minute >= WINDOW_FROM_MINUTE &&
     now.minute <= WINDOW_TO_MINUTE;
 
-  if (!inWindow && !force) {
+  // La vista previa no envía nada, así que no está sujeta a la ventana horaria:
+  // es justo la herramienta con la que se comprueba qué pasaría a las 5:30.
+  if (!inWindow && !force && !previewDate) {
     const hh = String(now.hour).padStart(2, '0');
     const mm = String(now.minute).padStart(2, '0');
     return NextResponse.json({ ok: true, skipped: `fuera de ventana (Madrid ${hh}:${mm})` });
   }
 
-  /*
-   * Modo vista previa: `?preview=YYYY-MM-DD` devuelve lo que se enviaría ese
-   * día, sin enviar nada ni tocar el pestillo. Sirve para comprobar el
-   * contenido y, sobre todo, para verificar que los días de descanso también
-   * generan correo.
-   */
-  const previewRaw = params.get('preview');
-  const previewDate = previewRaw && /^\d{4}-\d{2}-\d{2}$/.test(previewRaw) ? previewRaw : null;
   const dateISO = previewDate ?? now.dateISO;
 
   /* ---------------------------------------------------------------- */
