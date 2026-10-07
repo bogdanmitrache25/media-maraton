@@ -13,7 +13,7 @@
 |---|---|
 | **A** | Tirada larga — la sesión más importante de la semana |
 | **B** | Sesión de calidad (series, fartlek, tempo, test) |
-| **Cross** | Bici Z2 o cinta inclinada |
+| **Cross** | Bici Z2 o cinta (en llano durante la fase 1) |
 | **Gym** | Tu entrenamiento de fuerza (yo no lo prescribo, solo lo coordino) |
 | **TB** | Protocolo tibial/sóleo (8-10 min) |
 | 🔄 | Sesión movible dentro de la semana |
@@ -32,7 +32,7 @@ Tus días cambian, así que este es el patrón por defecto. **Muévelo siguiendo
 | **Lunes** | Gimnasio · **pierna pesada** | 🔄 |
 | **Martes** | Cross · **Bici Z2** | 🔄 |
 | **Miércoles** | **B · Calidad** | 🔄 |
-| **Jueves** | Cross · **Cinta inclinada** | 🔄 |
+| **Jueves** | Cross · **Cinta** (llana en fase 1, inclinada después) | 🔄 |
 | **Viernes** | Gimnasio · **torso** | 🔄 |
 | **Sábado** | Descanso total + **TB** | — |
 | **Domingo** | **A · Tirada larga** | 🔄 |
@@ -110,7 +110,7 @@ Todo lo que pase en las 23 semanas se compara contra esto. **Sin este registro, 
 | Lun | 5 oct | — *(semana no iniciada)* |
 | Mar | 6 oct | **Cross · Bici Z2** — 40 min. **Hoy: medición basal** (palpación tibial en cm) **+ petición de analítica** (hemograma, ferritina, vit D, TSH). |
 | Mié | 7 oct | **B · Calidad** — 3 km de trote continuo RPE 3 + 4 × 20 s de progresiones. |
-| Jue | 8 oct | **Cross · Cinta** — 10 % / 4,0 km/h × 20 min. |
+| Jue | 8 oct | **Cross · Cinta en llano** — 4,5 km/h × 20 min + 3 × 15 bajadas de talón. **Sin inclinación en toda la fase 1.** |
 | Vie | 9 oct | **Gym** — torso. Arranca la rutina sóleo (ejercicios 1, 3, 5, 6). |
 | Sáb | 10 oct | **Descanso total** + **TB**. Cuenta tu cadencia durante 30 s. |
 | Dom | 11 oct | **A · Tirada larga** — 5 km: 5 × (4 min trote muy suave + 2 min caminata). RPE 3. |
@@ -126,7 +126,7 @@ Todo lo que pase en las 23 semanas se compara contra esto. **Sin este registro, 
 | Lun | 12 oct | **Gym** — pierna pesada. |
 | Mar | 13 oct | **Cross · Bici Z2** — 45 min. |
 | Mié | 14 oct | **B · Calidad** — 4 km de trote continuo RPE 3-4 + 4 × 20 s progresiones. |
-| Jue | 15 oct | **Cross · Cinta** — 11 % / 4,0 km/h × 25 min. |
+| Jue | 15 oct | **Cross · Cinta en llano** — 4,5 km/h × 25 min + 3 × 15 bajadas de talón. |
 | Vie | 16 oct | **Gym** — torso. Rutina sóleo. |
 | Sáb | 17 oct | **Descanso total** + **TB**. |
 | Dom | 18 oct | **A · Tirada larga** — 6 km: 6 × (4 min trote + 2 min caminata). RPE 3-4. |
@@ -140,7 +140,7 @@ Todo lo que pase en las 23 semanas se compara contra esto. **Sin este registro, 
 | Lun | 19 oct | **Gym** — pierna pesada. |
 | Mar | 20 oct | **Cross · Bici Z2** — 50 min. |
 | Mié | 21 oct | **B · Calidad** — 5 km: 2 km fácil + 4 × (2 min RPE 5-6 / 2 min fácil) + 1 km fácil. |
-| Jue | 22 oct | **Cross · Cinta** — 12 % / 4,0 km/h × 30 min. |
+| Jue | 22 oct | **Cross · Cinta en llano** — 4,8 km/h × 30 min + 3 × 15 bajadas de talón. |
 | Vie | 23 oct | **Gym** — torso. Rutina sóleo 4×/sem. |
 | Sáb | 24 oct | **Descanso total** + **TB**. **Revisa tu calzado: necesitas 2 pares en rotación.** |
 | Dom | 25 oct | **A · Tirada larga** — 7 km de rodaje continuo RPE 4 (sin caminata). |
@@ -156,7 +156,7 @@ Todo lo que pase en las 23 semanas se compara contra esto. **Sin este registro, 
 | Lun | 26 oct | **Gym** — pierna **ligera**. |
 | Mar | 27 oct | **Cross · Bici Z2** — 40 min. |
 | Mié | 28 oct | **B · Calidad** — 3,5 km de rodaje suave RPE 3 + 4 × 20 s progresiones. |
-| Jue | 29 oct | **Descanso** + **TB**. *(Sin cinta inclinada esta semana.)* |
+| Jue | 29 oct | **Descanso** + **TB**. *(Sin cinta inclinada en toda la fase 1.)* | |
 | Vie | 30 oct | **Gym** — torso. |
 | Sáb | 31 oct | **Descanso total** + **TB**. |
 | Dom | 1 nov | **A · Tirada larga** — 5,5 km de rodaje muy suave RPE 3. |
@@ -179,7 +179,7 @@ Todo lo que pase en las 23 semanas se compara contra esto. **Sin este registro, 
 | Lun | 2 nov | **Gym** — pierna pesada. |
 | Mar | 3 nov | **Cross · Bici Z2** — 60 min. |
 | Mié | 4 nov | **B · Calidad** — 7 km: 2 km fácil + 3 × (3 min RPE 6 / 2 min fácil) + 2 km fácil. |
-| Jue | 5 nov | **Cross · Cinta** — 13 % / 4,0 km/h × 35 min. |
+| Jue | 5 nov | **Cross · Cinta** — 10 % / 4,0 km/h × 35 min. **Primer contacto con la inclinación.** |
 | Vie | 6 nov | **Gym** — torso. **Empieza el colágeno + vit C** 45-60 min antes de las sesiones de carga. |
 | Sáb | 7 nov | **Descanso total** + **TB**. |
 | Dom | 8 nov | **A · Tirada larga** — 8 km de rodaje continuo Z2. RPE 4. |
@@ -193,7 +193,7 @@ Todo lo que pase en las 23 semanas se compara contra esto. **Sin este registro, 
 | Lun | 9 nov | **Gym** — pierna pesada. |
 | Mar | 10 nov | **Cross · Bici Z2** — 60 min. |
 | Mié | 11 nov | **B · Calidad** — 8 km: 3 km fácil + 5 × (2 min RPE 6-7 / 90 s fácil) + 1 km fácil. |
-| Jue | 12 nov | **Cross · Cinta** — 14 % / 4,0 km/h × 35 min. |
+| Jue | 12 nov | **Cross · Cinta** — 12 % / 4,0 km/h × 35 min. |
 | Vie | 13 nov | **Gym** — torso. |
 | Sáb | 14 nov | **Descanso total** + **TB**. **Primera revisión formal del semáforo de dolor.** |
 | Dom | 15 nov | **A · Tirada larga** — 9 km: 7 km Z2 + 2 km finales a RPE 5-6. |

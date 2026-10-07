@@ -343,13 +343,15 @@ Domingo    → Gimnasio ligero + protocolo tibial
 
 > **Objetivo de la fase:** que tu tibia acepte el impacto otra vez. No buscamos forma física: buscamos **no lesionarnos**.
 > **Regla:** si hay cualquier molestia tibial en una sesión, la semana siguiente **no sube nada**.
+>
+> ⚠️ **Sin cinta inclinada en toda la fase 1 (S1–S4).** La periostitis fue **bilateral**, y eso apunta a carga acumulada, no a un defecto mecánico de una sola pierna. Se retira la inclinación y se sustituye por **llano más bajadas de talón**, que dan el estímulo de sóleo sin la carga cuesta arriba. Vuelve en S5 rebajada (10 % en vez de 13 %) y a partir de S7 se recalibra con el test de 5K.
 
 ### 🟢 Semana 1 · 5–11 oct 2026 — 8 km
 > Reintroducir el impacto. Establecer el protocolo.
 
 - **A · Tirada larga (5 km):** 5 × (4 min trote muy suave + 2 min caminata rápida). RPE 3.
 - **B · Calidad (3 km):** trote continuo 3 km RPE 3 + 4 × 20 s de progresiones (trote vivo, **no sprint**).
-- **Cross:** bici 40 min Z2 · cinta 10 % / 4,0 km/h × 20 min.
+- **Cross:** bici 40 min Z2 · cinta en llano 4,5 km/h × 20 min + 3 × 15 bajadas de talón a una pierna.
 - **Prev:** medición basal (palpación tibial en cm), **analítica** (hemograma, ferritina, vit D, TSH), arranque de rutina sóleo (ej. 1, 3, 5, 6) 3×/sem, contar cadencia.
 - ⚠️ **No hacer ningún test.** Nada de series fuertes.
 
@@ -358,7 +360,7 @@ Domingo    → Gimnasio ligero + protocolo tibial
 
 - **A · Tirada larga (6 km):** 6 × (4 min trote + 2 min caminata). RPE 3-4.
 - **B · Calidad (4 km):** trote continuo 4 km RPE 3-4 + 4 × 20 s progresiones.
-- **Cross:** bici 45 min Z2 · cinta 11 % / 4,0 km/h × 25 min.
+- **Cross:** bici 45 min Z2 · cinta en llano 4,5 km/h × 25 min + 3 × 15 bajadas de talón a una pierna.
 - **Prev:** rutina sóleo 3×/sem. Registro diario de dolor (0-10) y sueño.
 
 ### 🟢 Semana 3 · 19–25 oct 2026 — 12 km
@@ -366,7 +368,7 @@ Domingo    → Gimnasio ligero + protocolo tibial
 
 - **A · Tirada larga (7 km):** rodaje continuo 7 km RPE 4 (si la tibia aguanta sin necesidad de caminar).
 - **B · Calidad (5 km):** 2 km fácil + 4 × (2 min RPE 5-6 / 2 min fácil) + 1 km fácil.
-- **Cross:** bici 50 min Z2 · cinta 12 % / 4,0 km/h × 30 min.
+- **Cross:** bici 50 min Z2 · cinta en llano 4,8 km/h × 30 min + 3 × 15 bajadas de talón a una pierna.
 - **Prev:** sóleo 4×/sem. **Revisión de calzado:** tienes que tener 2 pares en rotación. Cadencia objetivo 172.
 
 ### 🔵 Semana 4 · 26 oct – 1 nov 2026 — DESCARGA · 9 km
@@ -374,7 +376,7 @@ Domingo    → Gimnasio ligero + protocolo tibial
 
 - **A · Tirada larga (5,5 km):** rodaje muy suave RPE 3.
 - **B · Calidad (3,5 km):** rodaje suave RPE 3 + 4 × 20 s progresiones.
-- **Cross:** **solo bici 40 min Z2.** Sin cinta inclinada esta semana.
+- **Cross:** **solo bici 40 min Z2.** Sin cinta inclinada en toda la fase 1.
 - **Prev:** masaje plantar, repetición del test de palpación tibial, cálculo del ACWR. Revisa que no haya aparecido dolor focal.
 
 ---
@@ -387,13 +389,13 @@ Domingo    → Gimnasio ligero + protocolo tibial
 ### 🟢 Semana 5 · 2–8 nov 2026 — 15 km
 - **A · Tirada larga (8 km):** rodaje continuo Z2, RPE 4.
 - **B · Calidad (7 km):** 2 km fácil + 3 × (3 min RPE 6 / 2 min fácil) + 2 km fácil.
-- **Cross:** bici 60 min Z2 · cinta 13 % / 4,0 km/h × 35 min.
+- **Cross:** bici 60 min Z2 · cinta 10 % / 4,0 km/h × 35 min. **Primer contacto con la inclinación: si la tibia dice algo, vuelve a llano.**
 - **Prev:** sóleo 4×/sem. **Empieza el colágeno + vit C** 45-60 min antes de la sesión de carga.
 
 ### 🟢 Semana 6 · 9–15 nov 2026 — 17 km
 - **A · Tirada larga (9 km):** 7 km Z2 + 2 km finales a RPE 5-6.
 - **B · Calidad (8 km):** 3 km fácil + 5 × (2 min RPE 6-7 / 90 s fácil) + 1 km fácil.
-- **Cross:** bici 60 min Z2 · cinta 14 % / 4,0 km/h × 35 min.
+- **Cross:** bici 60 min Z2 · cinta 12 % / 4,0 km/h × 35 min.
 - **Prev:** primera revisión formal del semáforo de dolor. ¿Algún amarillo? Si sí, no subas en S7.
 
 ### 🔬 Semana 7 · 16–22 nov 2026 — 18 km · TEST 5K
