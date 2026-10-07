@@ -3,7 +3,14 @@
 import { revalidatePath } from 'next/cache';
 import { createClientWithUser } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/rate-limit';
-import { toNumberOrNull, clearOverrideSchema, sessionOverrideSchema, toggleSessionSchema, weeklyLogSchema } from '@/lib/validation';
+import {
+  clearOverrideSchema,
+  digestPrefSchema,
+  sessionOverrideSchema,
+  toNumberOrNull,
+  toggleSessionSchema,
+  weeklyLogSchema,
+} from '@/lib/validation';
 import { isCountable, WEEKS } from '@/lib/plan-data';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -201,6 +208,36 @@ export async function clearSessionOverride(input: unknown): Promise<ActionResult
 
   if (error) {
     console.error('[clearSessionOverride]', error.message);
+    return { ok: false, error: GENERIC_ERROR };
+  }
+
+  revalidatePath('/plan');
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Correo diario con el plan del día                                         */
+/* -------------------------------------------------------------------------- */
+
+export async function setDigestEnabled(input: unknown): Promise<ActionResult> {
+  const { supabase, user } = await createClientWithUser();
+  if (!user) return { ok: false, error: 'Tu sesión ha caducado. Vuelve a entrar.' };
+
+  const parsed = digestPrefSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Datos no válidos.' };
+
+  if (!(await rateLimit(`digest:${user.id}`, 30, 60))) {
+    return { ok: false, error: RATE_LIMIT_ERROR };
+  }
+
+  // El atleta solo puede tocar su propia fila: RLS lo garantiza en el motor.
+  const { error } = await supabase
+    .from('profiles')
+    .update({ digest_enabled: parsed.data.enabled })
+    .eq('id', user.id);
+
+  if (error) {
+    console.error('[setDigestEnabled]', error.message);
     return { ok: false, error: GENERIC_ERROR };
   }
 

@@ -55,6 +55,31 @@ export const SESSION_TYPES: Record<SessionType, { label: string; bar: string }> 
   Z: { label: 'CARRERA', bar: '#22c55e' },
 };
 
+/**
+ * Código tipográfico de cada tipo de sesión. Sustituye a los iconos y a las
+ * insignias de color, tanto en la app como en el correo diario.
+ */
+export const SESSION_CODE: Record<SessionType, string> = {
+  A: 'FONDO',
+  B: 'CALIDAD',
+  C: 'CRUCE',
+  G: 'FUERZA',
+  R: 'LIBRE',
+  T: 'TEST',
+  Z: 'CARRERA',
+};
+
+/** Intensidad 0-3. Es lo que codifica el color de la regla izquierda. */
+export const SESSION_INTENSITY: Record<SessionType, 0 | 1 | 2 | 3> = {
+  R: 0,
+  C: 1,
+  G: 1,
+  A: 2,
+  B: 2,
+  T: 3,
+  Z: 3,
+};
+
 export const RACE_DATE = '2027-03-14';
 export const PLAN_START = '2026-10-05';
 export const PLAN_END = '2027-03-14';

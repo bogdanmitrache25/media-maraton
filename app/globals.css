@@ -1365,6 +1365,86 @@ select.input {
 }
 
 /* --------------------------------------------------------------------------
+   9.7 PREFERENCIAS
+   -------------------------------------------------------------------------- */
+.pref {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 16px 0;
+  margin-bottom: 18px;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.pref-text {
+  min-width: 0;
+}
+
+.pref-t {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.pref-d {
+  margin-top: 4px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--ink-mid);
+}
+
+/* Un interruptor de esquinas rectas: encaja con el resto del sistema, donde
+   nada es redondo. El área táctil completa son 44 px aunque el riel sea 26. */
+.switch {
+  position: relative;
+  width: 44px;
+  height: 44px;
+}
+
+.switch::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 44px;
+  height: 26px;
+  margin-top: -13px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  transition:
+    background 0.2s var(--ease),
+    border-color 0.2s var(--ease);
+}
+
+.switch[aria-checked='true']::before {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.switch-knob {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: 16px;
+  height: 16px;
+  margin-top: -8px;
+  border-radius: 1px;
+  background: var(--rule-strong);
+  transition:
+    transform 0.2s var(--ease),
+    background 0.2s var(--ease);
+}
+
+.switch[aria-checked='true'] .switch-knob {
+  transform: translateX(20px);
+  background: var(--paper);
+}
+
+/* --------------------------------------------------------------------------
    10. MOVIMIENTO REDUCIDO
    -------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {

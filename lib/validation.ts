@@ -62,6 +62,11 @@ export const clearOverrideSchema = z.object({
   day: DAY,
 });
 
+/** Preferencia del correo diario con el plan del día. */
+export const digestPrefSchema = z.object({
+  enabled: z.boolean(),
+});
+
 /**
  * Convierte un valor de `FormData` en número o `null`.
  * Cadena vacía, ausente o no numérica → `null` (no cero).

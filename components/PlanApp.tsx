@@ -6,6 +6,7 @@ import {
   resetMyProgress,
   saveSessionOverride,
   saveWeeklyLog,
+  setDigestEnabled,
   toggleSession,
 } from '@/app/plan/actions';
 import { PreventionTab } from '@/components/PreventionTab';
@@ -15,6 +16,8 @@ import { buildTrainingReport } from '@/lib/export';
 import {
   DAY_NAMES,
   PHASES,
+  SESSION_CODE as CODE,
+  SESSION_INTENSITY as INTENSITY,
   WEEKS,
   dateOf,
   dayIndexIn,
@@ -59,6 +62,7 @@ interface Props {
   initialDone: string[];
   initialLogs: LogRow[];
   initialOverrides: OverrideRow[];
+  initialDigest: boolean;
   serverToday: string;
   theme?: ThemeChoice;
 }
@@ -66,28 +70,6 @@ interface Props {
 type Tab = 'hoy' | 'plan' | 'pre' | 'reg';
 
 const KEY = (week: number, day: number) => `${week}:${day}`;
-
-/** Código tipográfico de sesión. Sustituye a los iconos y a los badges de color. */
-const CODE: Record<SessionType, string> = {
-  A: 'FONDO',
-  B: 'CALIDAD',
-  C: 'CRUCE',
-  G: 'FUERZA',
-  R: 'LIBRE',
-  T: 'TEST',
-  Z: 'CARRERA',
-};
-
-/** Intensidad 0-3. Es lo que codifica el color de la regla izquierda. */
-const INTENSITY: Record<SessionType, 0 | 1 | 2 | 3> = {
-  R: 0,
-  C: 1,
-  G: 1,
-  A: 2,
-  B: 2,
-  T: 3,
-  Z: 3,
-};
 
 function localToday(): string {
   const now = new Date();
@@ -107,6 +89,7 @@ export function PlanApp({
   initialDone,
   initialLogs,
   initialOverrides,
+  initialDigest,
   serverToday,
   theme,
 }: Props) {
@@ -126,6 +109,7 @@ export function PlanApp({
   const [openWeeks, setOpenWeeks] = useState<Set<number>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ week: number; day: number } | null>(null);
+  const [digest, setDigest] = useState(initialDigest);
   /*
    * Qué fila acaba de cambiar. La animación de marcado debe dispararse una sola
    * vez, al pulsar, y no cada vez que la lista se vuelve a pintar: si no, al
@@ -286,6 +270,23 @@ export function PlanApp({
     [user.name, today, done, overrides, logs],
   );
 
+  const handleDigest = useCallback(async () => {
+    const next = !digest;
+    setDigest(next);
+    try {
+      const res = await setDigestEnabled({ enabled: next });
+      if (!res.ok) {
+        setDigest(!next);
+        showToast(res.error);
+      } else {
+        showToast(next ? 'Te escribo cada mañana a las 5:30' : 'Correo diario desactivado');
+      }
+    } catch {
+      setDigest(!next);
+      showToast('Sin conexión. Inténtalo de nuevo.');
+    }
+  }, [digest, showToast]);
+
   /* ---------------------------------------------------------------- */
 
   return (
@@ -378,9 +379,30 @@ export function PlanApp({
 
         <div className="sect">
           <p className="eyebrow">Cuenta</p>
-          <p className="num soft" style={{ fontSize: 12, margin: '10px 0 16px' }}>
+          <p className="num soft" style={{ fontSize: 12, margin: '10px 0 18px' }}>
             {user.email}
           </p>
+
+          <div className="pref">
+            <div className="pref-text">
+              <p className="pref-t">Correo diario</p>
+              <p className="pref-d">
+                El plan de cada día en tu correo a las 5:30 de la mañana. Si un día toca descanso, te
+                lo digo igual.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="switch"
+              role="switch"
+              aria-checked={digest}
+              aria-label="Correo diario con el plan del día"
+              onClick={handleDigest}
+            >
+              <span className="switch-knob" />
+            </button>
+          </div>
+
           <form action="/auth/signout" method="post">
             <button className="btn" type="submit">
               Cerrar sesión

@@ -2,9 +2,18 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
 import { getPublicEnv } from '@/lib/env';
 
-/** Rutas accesibles sin sesión. Todo lo demás exige login. */
+/**
+ * Rutas accesibles sin sesión. Todo lo demás exige login.
+ *
+ * El cron entra aquí a propósito: no tiene sesión de usuario, pero se protege
+ * por su cuenta con `CRON_SECRET` dentro de la propia ruta. Si no se abriera,
+ * el middleware lo redirigiría a /login y no se enviaría ningún correo.
+ */
 const isPublic = (pathname: string) =>
-  pathname === '/' || pathname === '/login' || pathname.startsWith('/auth/');
+  pathname === '/' ||
+  pathname === '/login' ||
+  pathname.startsWith('/auth/') ||
+  pathname.startsWith('/api/cron/');
 
 /**
  * Cabeceras de seguridad. La CSP se construye con un nonce por petición, así

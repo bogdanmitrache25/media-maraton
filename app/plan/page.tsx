@@ -16,7 +16,11 @@ export default async function PlanPage() {
 
   // Lectura en paralelo. RLS garantiza que solo llegan filas de este usuario.
   const [profileRes, sessionsRes, logsRes, overridesRes] = await Promise.all([
-    supabase.from('profiles').select('display_name, avatar_url').eq('id', user.id).maybeSingle(),
+    supabase
+      .from('profiles')
+      .select('display_name, avatar_url, digest_enabled')
+      .eq('id', user.id)
+      .maybeSingle(),
     supabase.from('session_completions').select('week, day').eq('user_id', user.id),
     supabase
       .from('weekly_logs')
@@ -59,6 +63,7 @@ export default async function PlanPage() {
       initialDone={done}
       initialLogs={logs}
       initialOverrides={overrides}
+      initialDigest={profileRes.data?.digest_enabled ?? false}
       serverToday={new Date().toISOString().slice(0, 10)}
       theme={theme}
     />
