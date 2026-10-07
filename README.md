@@ -265,6 +265,13 @@ Con el remitente por defecto (`onboarding@resend.dev`) Resend **solo entrega al 
 cuenta**. Para enviar a otros destinatarios hay que verificar un dominio en Resend y ajustar
 `DIGEST_FROM`.
 
+Mientras eso siga así, `DIGEST_RECIPIENTS` (lista separada por comas) actúa de **lista blanca**. Evita
+el peor escenario posible: que un amigo active el interruptor del correo, el mensaje salga, Resend lo
+rechace y él se quede esperando algo que nunca va a llegar sin saber por qué. Si alguien fuera de la
+lista intenta activarlo, la app se lo dice en lugar de aceptarlo en silencio.
+
+Si se deja vacía, manda la preferencia por usuario de la app con normalidad.
+
 ---
 
 ## Estructura
