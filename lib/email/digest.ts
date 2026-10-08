@@ -37,15 +37,15 @@ export interface DigestInput {
   appUrl: string;
 }
 
-const PAPER = '#efebe3';
-const INK = '#17140f';
-const INK_MID = '#5c534a';
-const RULE = '#d3cabb';
-const SIGNAL = '#b0350f';
-const DONE = '#3f5b3a';
+export const PAPER = '#efebe3';
+export const INK = '#17140f';
+export const INK_MID = '#5c534a';
+export const RULE = '#d3cabb';
+export const SIGNAL = '#b0350f';
+export const DONE = '#3f5b3a';
 
-const MONO = "ui-monospace, 'SF Mono', Menlo, Consolas, monospace";
-const SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+export const MONO = "ui-monospace, 'SF Mono', Menlo, Consolas, monospace";
+export const SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
 function longDate(iso: string): string {
   return new Date(`${iso}T12:00:00Z`).toLocaleDateString('es-ES', {
