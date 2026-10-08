@@ -22,11 +22,17 @@ import { PHASES, dayIndexIn, isCountable, weekOfDate, weekTotal } from '@/lib/pl
  *   - `/api/cron/digest-summer` a las 3:30 UTC → 5:30 en verano (UTC+2)
  *   - `/api/cron/digest-winter` a las 4:30 UTC → 5:30 en invierno (UTC+1)
  *
- * El que no toca cae fuera de la ventana y no hace nada.
+ * La ventana de aceptación es ancha a propósito. En el plan gratuito Vercel
+ * avisa de que un cron puede ejecutarse **en cualquier momento dentro de la
+ * hora programada**: si el de las 3:30 UTC se retrasa media hora, en Madrid ya
+ * son las 6:00 y una ventana estrecha lo descartaría. Con dos disparos y media
+ * hora de retraso, ninguno de los dos caería dentro y ese día no llegaría
+ * correo. De 05:25 a 07:30 cualquier retraso razonable entra.
+ *
+ * Duplicar el envío no es un riesgo: el pestillo `digest_sent_on` lo impide.
  */
-const TARGET_HOUR = 5;
-const WINDOW_FROM_MINUTE = 25;
-const WINDOW_TO_MINUTE = 59;
+const WINDOW_FROM = 5 * 60 + 25; // 05:25 en Madrid
+const WINDOW_TO = 7 * 60 + 30; // 07:30 en Madrid
 
 const TIME_ZONE = 'Europe/Madrid';
 
@@ -107,10 +113,8 @@ export async function runDigest(request: Request): Promise<NextResponse> {
   /* 2. ¿Es la hora?                                                    */
   /* ---------------------------------------------------------------- */
   const now = madridNow();
-  const inWindow =
-    now.hour === TARGET_HOUR &&
-    now.minute >= WINDOW_FROM_MINUTE &&
-    now.minute <= WINDOW_TO_MINUTE;
+  const minutesNow = now.hour * 60 + now.minute;
+  const inWindow = minutesNow >= WINDOW_FROM && minutesNow <= WINDOW_TO;
 
   // La vista previa no envía nada, así que no está sujeta a la ventana horaria:
   // es justo la herramienta con la que se comprueba qué pasaría a las 5:30.
