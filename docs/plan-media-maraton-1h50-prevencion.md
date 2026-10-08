@@ -355,11 +355,13 @@ Domingo    → Gimnasio ligero + protocolo tibial
 - **Prev:** medición basal (palpación tibial en cm), **analítica** (hemograma, ferritina, vit D, TSH), arranque de rutina sóleo (ej. 1, 3, 5, 6) 3×/sem, contar cadencia.
 - ⚠️ **No hacer ningún test.** Nada de series fuertes.
 
-### 🟢 Semana 2 · 12–18 oct 2026 — 10 km
+### 🟢 Semana 2 · 12–18 oct 2026 — 8 km
 > Igual que S1, un poco más largo.
+>
+> 🔧 **Ajustada de 10 km a 8 km.** La S1 real cerró con **5 km de carrera** en vez de 8. Para no duplicar el volumen de una semana a la siguiente, la calidad baja a 3 km y la tirada a 5 km. La S3 se queda en 12 km.
 
-- **A · Tirada larga (6 km):** 6 × (4 min trote + 2 min caminata). RPE 3-4.
-- **B · Calidad (4 km):** trote continuo 4 km RPE 3-4 + 4 × 20 s progresiones.
+- **A · Tirada larga (5 km):** 5 × (4 min trote + 2 min caminata). RPE 3-4.
+- **B · Calidad (3 km):** trote continuo 3 km RPE 3-4 + 4 × 20 s progresiones.
 - **Cross:** bici 45 min Z2 · cinta en llano 4,5 km/h × 25 min + 3 × 15 bajadas de talón a una pierna.
 - **Prev:** rutina sóleo 3×/sem. Registro diario de dolor (0-10) y sueño.
 

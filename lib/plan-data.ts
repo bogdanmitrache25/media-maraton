@@ -109,17 +109,17 @@ export const WEEKS: Week[] = [
   {
     n: 2,
     start: '2026-10-12',
-    km: '10 km',
+    km: '8 km',
     phase: 1,
     focus: 'Igual que S1, un poco más largo',
     days: [
       d('G', 'Gym — pierna pesada'),
       d('C', 'Bici Z2 · 45 min'),
-      d('B', 'Calidad · 4 km', 'Trote continuo RPE 3-4 + 4×20 s de progresiones'),
+      d('B', 'Calidad · 3 km', 'Trote continuo RPE 3-4 + 4×20 s de progresiones'),
       d('C', 'Cinta · llano / 4,5 km/h × 25 min', 'Sin inclinación. 3×15 bajadas de talón a una pierna al terminar'),
       d('G', 'Gym — torso', 'Rutina sóleo'),
       d('R', 'Descanso total + TB'),
-      d('A', 'Tirada larga · 6 km', '6×(4 min trote + 2 min caminata). RPE 3-4'),
+      d('A', 'Tirada larga · 5 km', '5×(4 min trote + 2 min caminata). RPE 3-4'),
     ],
   },
   {

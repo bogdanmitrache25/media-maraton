@@ -42,6 +42,7 @@ Tus días cambian, así que este es el patrón por defecto. **Muévelo siguiendo
 1. **A y B nunca en días consecutivos.** Si tu semana se descuadra, convierte la B en rodaje suave.
 2. **La cinta inclinada nunca el día antes de la tirada larga** (carga mucho el sóleo).
 3. **Pierna pesada en el gimnasio nunca menos de 48 h antes de la tirada larga.**
+4. **La bici Z2, pegada al gimnasio.** Termina la sesión de fuerza y sube 20-25 min a la bici en el mismo sitio, antes de irte. No es una sesión aparte que haya que ir a buscar: es la última parte del gimnasio. Es la forma de que el trabajo aeróbico sin impacto no se caiga.
 
 ### Tu 3ª sesión de gimnasio
 
@@ -119,17 +120,17 @@ Todo lo que pase en las 23 semanas se compara contra esto. **Sin este registro, 
 
 ---
 
-### Semana 2 · 12 – 18 de octubre de 2026 · **10 km**
+### Semana 2 · 12 – 18 de octubre de 2026 · **8 km**
 
 | Día | Fecha | Sesión |
 |---|---|---|
 | Lun | 12 oct | **Gym** — pierna pesada. |
 | Mar | 13 oct | **Cross · Bici Z2** — 45 min. |
-| Mié | 14 oct | **B · Calidad** — 4 km de trote continuo RPE 3-4 + 4 × 20 s progresiones. |
+| Mié | 14 oct | **B · Calidad** — 3 km de trote continuo RPE 3-4 + 4 × 20 s progresiones. |
 | Jue | 15 oct | **Cross · Cinta en llano** — 4,5 km/h × 25 min + 3 × 15 bajadas de talón. |
 | Vie | 16 oct | **Gym** — torso. Rutina sóleo. |
 | Sáb | 17 oct | **Descanso total** + **TB**. |
-| Dom | 18 oct | **A · Tirada larga** — 6 km: 6 × (4 min trote + 2 min caminata). RPE 3-4. |
+| Dom | 18 oct | **A · Tirada larga** — 5 km: 5 × (4 min trote + 2 min caminata). RPE 3-4. |
 
 ---
 
