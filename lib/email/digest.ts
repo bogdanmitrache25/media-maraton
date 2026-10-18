@@ -12,6 +12,7 @@ import {
   SESSION_CODE,
   type SessionType,
 } from '@/lib/plan-data';
+import { GYM_PHASE_NOTE, type GymSession } from '@/lib/gym-data';
 
 export interface DigestSession {
   type: SessionType;
@@ -35,6 +36,8 @@ export interface DigestInput {
   weekDone: number;
   weekTotal: number;
   appUrl: string;
+  /** Rutina de fuerza del día. Ausente si el día no toca gimnasio. */
+  gym?: GymSession;
 }
 
 export const PAPER = '#efebe3';
@@ -88,6 +91,7 @@ export function buildDigest(input: DigestInput): {
     weekDone,
     weekTotal,
     appUrl,
+    gym,
   } = input;
 
   const day = DAY_NAMES[dayIndex] ?? '';
@@ -101,6 +105,19 @@ export function buildDigest(input: DigestInput): {
   /* Texto plano: el que leen los relojes, los asistentes y los filtros  */
   /* ------------------------------------------------------------------ */
 
+  const gymText = gym
+    ? [
+        `RUTINA · ${gym.label}`,
+        ...gym.blocks.flatMap((block) => [
+          `· ${block.name} — ${block.prescription}${block.rest ? ` · ${block.rest}` : ''}`,
+          ...(block.paired
+            ? [`  + ${block.paired} (${block.pairedPrescription ?? block.prescription})`]
+            : []),
+        ]),
+        GYM_PHASE_NOTE,
+      ]
+    : [];
+
   const text = [
     `${dateLabel.charAt(0).toUpperCase()}${dateLabel.slice(1)}`,
     '',
@@ -110,6 +127,7 @@ export function buildDigest(input: DigestInput): {
     '',
     session.overridden ? `Sustituye a «${session.overridden}»` : '',
     session.desc,
+    ...gymText,
     '',
     isRest
       ? 'Día de descanso. Rutina tibial y de sóleo, 8-10 min.'
@@ -173,6 +191,32 @@ export function buildDigest(input: DigestInput): {
           session.desc
             ? `<p style="margin:16px 0 0;font-family:${MONO};font-size:12.5px;line-height:1.55;color:${INK_MID};">
                  ${session.desc}
+               </p>`
+            : ''
+        }
+
+        ${
+          gym
+            ? `<p style="margin:20px 0 0;font-family:${MONO};font-size:9.5px;letter-spacing:0.18em;text-transform:uppercase;color:${INK_MID};">
+                 Rutina · ${gym.label}
+               </p>
+               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;">
+                 ${gym.blocks
+                   .map(
+                     (block) => `<tr><td style="padding:9px 0;border-top:1px solid ${RULE};font-family:${MONO};font-size:11.5px;line-height:1.5;color:${INK};">
+                     ${block.name}
+                     <br><span style="color:${INK_MID};">${block.prescription}${block.rest ? ` · ${block.rest}` : ''}</span>
+                     ${
+                       block.paired
+                         ? `<br><span style="color:${INK_MID};">+ ${block.paired} · ${block.pairedPrescription ?? block.prescription}</span>`
+                         : ''
+                     }
+                   </td></tr>`,
+                   )
+                   .join('')}
+               </table>
+               <p style="margin:12px 0 0;font-family:${MONO};font-size:11px;line-height:1.55;color:${SIGNAL};">
+                 ${GYM_PHASE_NOTE}
                </p>`
             : ''
         }

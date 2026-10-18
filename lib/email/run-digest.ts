@@ -12,6 +12,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { buildDigest } from '@/lib/email/digest';
 import { sendEmail } from '@/lib/email/resend';
 import { PHASES, dayIndexIn, isCountable, weekOfDate, weekTotal } from '@/lib/plan-data';
+import { GYM_SESSIONS } from '@/lib/gym-data';
 
 /**
  * Horario objetivo: 5:30 en Europe/Madrid.
@@ -164,6 +165,8 @@ export async function runDigest(request: Request): Promise<NextResponse> {
             overridden: baseDay.title,
           }
         : { type: baseDay.type, title: baseDay.title, desc: baseDay.desc, overridden: null },
+      // Si el atleta ha sustituido la sesión, la rutina original ya no aplica.
+      ...(baseDay.gym && !over ? { gym: GYM_SESSIONS[baseDay.gym] } : {}),
       isRest: !isCountable(baseDay.type),
       weekDone,
       weekTotal: total,

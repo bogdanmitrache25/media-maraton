@@ -5,6 +5,8 @@
  * usarse indistintamente en servidor y en cliente.
  */
 
+import type { GymKey } from '@/lib/gym-data';
+
 export type SessionType = 'A' | 'B' | 'C' | 'G' | 'R' | 'T' | 'Z';
 
 export interface Day {
@@ -14,6 +16,8 @@ export interface Day {
   title: string;
   /** Descripción o instrucciones. Cadena vacía si no aplica. */
   desc: string;
+  /** Rutina de gimnasio de ese día. Solo en las sesiones de fuerza. */
+  gym?: GymKey;
 }
 
 export interface Week {
@@ -85,7 +89,8 @@ export const PLAN_START = '2026-10-19';
 export const PLAN_END = '2027-03-14';
 export const TOTAL_WEEKS = 21;
 
-const d = (type: SessionType, title: string, desc = ''): Day => ({ type, title, desc });
+const d = (type: SessionType, title: string, desc = '', gym?: GymKey): Day =>
+  gym ? { type, title, desc, gym } : { type, title, desc };
 
 /**
  * Borrador del plan, escrito con 23 semanas de calendario.
@@ -104,10 +109,10 @@ const DRAFT_WEEKS: Week[] = [
     note: 'Ningún test esta semana. Nada de series fuertes.',
     warn: true,
     days: [
-      d('G', 'Gym — pull', 'Empieza aquí. El sóleo va en las superseries que ya trae tu programa'),
-      d('G', 'Gym — push', 'Cuádriceps a RPE 7-8, nada de fallo. Pide la analítica: vit D, ferritina, calcio, TSH'),
+      d('G', 'Gym · pull', 'Empieza aquí. El sóleo va en las superseries que ya trae tu programa', 'pull-a'),
+      d('G', 'Gym · push', 'Cuádriceps a RPE 7-8, nada de fallo. Pide la analítica: vit D, ferritina, calcio, TSH', 'push-a'),
       d('B', 'Carrera fácil · 3 km', 'Trote continuo RPE 3 + 4×20 s de progresiones. Antes de salir, palpación tibial basal'),
-      d('G', 'Gym — pull + bici Z2', 'Al terminar, 25-30 min de bici sin moverte del sitio. Añade 3×12 bajadas de talón'),
+      d('G', 'Gym · pull + bici Z2', 'Al terminar, 25-30 min de bici sin moverte del sitio. Añade 3×12 bajadas de talón', 'pull-b'),
       d('R', 'Descanso'),
       d('A', 'Tirada larga · 5 km', '5×(4 min trote muy suave + 2 min caminata). RPE 3. Cuenta la cadencia 30 s'),
       d('R', 'Descanso + sóleo', 'Bajadas de talón y pelota plantar. Las tibias no deben doler al día siguiente'),
