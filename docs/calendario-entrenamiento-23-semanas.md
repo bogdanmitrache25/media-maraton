@@ -57,7 +57,7 @@ Aquí tienes 2 fijas (lunes pierna, viernes torso). **La tercera colócala tú**
 
 ## � Registro basal — tu "cero" (rellenar el 6-7 de octubre de 2026)
 
-Todo lo que pase en las 23 semanas se compara contra esto. **Sin este registro, el semáforo de dolor no sirve.**
+Todo lo que pase en las 21 semanas se compara contra esto. **Sin este registro, el semáforo de dolor no sirve.**
 
 > ✅ **Estado de partida confirmado (6 oct 2026):** la tibia está **completamente indolora a la palpación en toda su longitud**. Tu "cero" es un rango completo, sin zonas sensibles.
 > Esto significa que **partes de una tibia sana y adaptada**, no de una tibia irritable. Es exactamente el escenario que queremos.

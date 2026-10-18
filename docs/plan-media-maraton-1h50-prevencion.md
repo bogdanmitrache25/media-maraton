@@ -4,7 +4,7 @@
 **Punto de partida:** 0 km/semana de carrera. Sin actividad aeróbica regular. Fuerza en gimnasio 3×/semana (autogestionada).
 **Historial:** episodio de periostitis tibial medial (<3 meses de molestias) hace más de un año. Actualmente asintomático.
 **Fecha de carrera:** domingo 14 de marzo de 2027 (media maratón, ya inscrito y pagado).
-**Ventana de preparación:** 23 semanas (5 de octubre de 2026 → 14 de marzo de 2027).
+**Ventana de preparación:** 21 semanas (19 de octubre de 2026 → 14 de marzo de 2027).
 **Objetivo:** 1:50:00 (5:13 min/km). **Objetivo primario real: llegar a la línea de salida sano.**
 
 > Este documento sustituye al `guia-completa-media-maraton-v2.md` **para tu caso concreto**. Aquel plan estaba escrito para un corredor con 50-60 km/semana de base y una marca de 10K de 33:30. Este parte de cero y está construido sobre tus restricciones reales: **2 días de carrera por semana, historial de periostitis y una fecha de carrera inamovible.**
@@ -58,7 +58,7 @@ Cuando no puedas hacerlo todo, sacrifica **en este orden**:
 
 ## 1. Objetivo realista y escenarios
 
-Tu estimación actual (5K ≈ 29:00, sin base de carrera) equivale aproximadamente a **2:10-2:15** en media maratón. El objetivo de 1:50 exige una mejora de ~20-25 minutos en 23 semanas.
+Tu estimación actual (5K ≈ 29:00, sin base de carrera) equivale aproximadamente a **2:10-2:15** en media maratón. El objetivo de 1:50 exige una mejora de ~20-25 minutos en 21 semanas.
 
 Eso es alcanzable **en un principiante que vuelve**, porque las ganancias iniciales son enormes. Pero no está garantizado, y depende de tres cosas: constancia, progresión sin lesión y tolerancia de la tibia.
 
@@ -116,7 +116,7 @@ Estos ritmos están estimados desde tu 5K de ~29:00. Son **provisionales**. El t
 
 ---
 
-## 3. Estructura de las 23 semanas
+## 3. Estructura de las 21 semanas
 
 | Fase | Semanas | Fechas | Foco | Volumen pico de carrera |
 |---|---|---|---|---|
