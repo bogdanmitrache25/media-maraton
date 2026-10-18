@@ -1,9 +1,11 @@
-# Calendario de Entrenamiento · 23 Semanas · 5 oct 2026 → 14 mar 2027
+# Calendario de Entrenamiento · 21 Semanas · 19 oct 2026 → 14 mar 2027
 
 **Objetivo:** media maratón en **1:50:00** el domingo 14 de marzo de 2027.
-**Punto de partida:** 0 km/semana · 2 días de carrera/semana · historial de periostitis tibial.
+**Punto de partida:** 0 km/semana · historial de periostitis tibial bilateral · pádel esporádico · 4 días de gimnasio (split push/pull).
 
 > Este documento es la versión **operativa, día a día**. Las reglas de carga, el semáforo de dolor, la rutina tibial/sóleo y toda la parte de prevención están en `plan-media-maraton-1h50-prevencion.md`. **Léelo antes de empezar.**
+
+> ⚠️ **Re-fechado el 18 oct 2026.** El plan pasa de 23 a 21 semanas porque el calendario real va del 19 de octubre a la carrera. Se descartaron la semana 4 (descarga prematura: la fase 1 solo llega a 12 km) y la 13 (cierre de fiestas). El resto se renumeró y se re-fechó. **Las tablas de las semanas de más abajo conservan la numeración antigua; la fuente de verdad es la app**, que ya usa el calendario nuevo.
 
 ---
 
@@ -29,20 +31,23 @@ Tus días cambian, así que este es el patrón por defecto. **Muévelo siguiendo
 
 | Día | Sesión | Movilidad |
 |---|---|---|
-| **Lunes** | Gimnasio · **pierna pesada** | 🔄 |
-| **Martes** | Cross · **Bici Z2** | 🔄 |
-| **Miércoles** | **B · Calidad** | 🔄 |
-| **Jueves** | Cross · **Cinta** (llana en fase 1, inclinada después) | 🔄 |
-| **Viernes** | Gimnasio · **torso** | 🔄 |
-| **Sábado** | Descanso total + **TB** | — |
-| **Domingo** | **A · Tirada larga** | 🔄 |
+| **Lunes** | Gimnasio · **PULL** | 🔄 |
+| **Martes** | Gimnasio · **PUSH** (pierna a RPE 7-8) | 🔄 |
+| **Miércoles** | **B · Carrera fácil** | 🔄 |
+| **Jueves** | Gimnasio · **PULL** + bici Z2 25-30 min | 🔄 |
+| **Viernes** | Descanso | — |
+| **Sábado** | **A · Tirada larga** | 🔄 |
+| **Domingo** | Descanso + sóleo y bajadas de talón | — |
+
+**Tres días de gimnasio en vez de cuatro, dos de carrera y uno de bici.** En la fase 3 el gimnasio baja a dos días y la carrera sube a cuatro. El pádel esporádico entra en el cajón del impacto: si un día juegas, ese día cuenta como carrera y no se añade nada encima.
 
 ### Las 3 reglas para mover sesiones
 
 1. **A y B nunca en días consecutivos.** Si tu semana se descuadra, convierte la B en rodaje suave.
-2. **La cinta inclinada nunca el día antes de la tirada larga** (carga mucho el sóleo).
-3. **Pierna pesada en el gimnasio nunca menos de 48 h antes de la tirada larga.**
-4. **La bici Z2, pegada al gimnasio.** Termina la sesión de fuerza y sube 20-25 min a la bici en el mismo sitio, antes de irte. No es una sesión aparte que haya que ir a buscar: es la última parte del gimnasio. Es la forma de que el trabajo aeróbico sin impacto no se caiga.
+2. **Ninguna cuesta abajo, ni corriendo ni andando, durante las 16 primeras semanas.** Las bajadas son el peor enemigo del hueso.
+3. **El día de pierna pesada, nunca menos de 48 h antes de la tirada larga.** Con el push en martes y la tirada en sábado quedan 96 h: margen de sobra.
+4. **La bici Z2, pegada al gimnasio.** Termina la sesión de fuerza y sube 25-30 min a la bici en el mismo sitio, antes de irte. No es una sesión aparte que haya que ir a buscar: es la última parte del gimnasio.
+5. **Nada de fallo en tren inferior.** Un fallo en sentadilla son 48-72 h de recuperación, y en esas 48-72 h va una carrera. RPE 7-8: un top set y una serie de trabajo por patrón.
 
 ### Tu 3ª sesión de gimnasio
 

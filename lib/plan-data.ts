@@ -37,12 +37,12 @@ export interface Week {
 export const DAY_NAMES = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'] as const;
 
 export const PHASES = {
-  1: { name: 'Reintroducción y blindaje', color: '#3b82f6', weeks: 'S1 – S4' },
-  2: { name: 'Base aeróbica', color: '#22c55e', weeks: 'S5 – S11' },
-  3: { name: 'Específico media maratón', color: '#f59e0b', weeks: 'S12 – S18' },
-  4: { name: 'Pico y afinado', color: '#ef4444', weeks: 'S19 – S20' },
-  5: { name: 'Taper', color: '#eab308', weeks: 'S21 – S22' },
-  6: { name: 'Semana de carrera', color: '#a855f7', weeks: 'S23' },
+  1: { name: 'Reintroducción y blindaje', color: '#3b82f6', weeks: 'S1 – S3' },
+  2: { name: 'Base aeróbica', color: '#22c55e', weeks: 'S4 – S10' },
+  3: { name: 'Específico media maratón', color: '#f59e0b', weeks: 'S11 – S16' },
+  4: { name: 'Pico y afinado', color: '#ef4444', weeks: 'S17 – S18' },
+  5: { name: 'Taper', color: '#eab308', weeks: 'S19 – S20' },
+  6: { name: 'Semana de carrera', color: '#a855f7', weeks: 'S21' },
 } as const;
 
 export const SESSION_TYPES: Record<SessionType, { label: string; bar: string }> = {
@@ -81,13 +81,20 @@ export const SESSION_INTENSITY: Record<SessionType, 0 | 1 | 2 | 3> = {
 };
 
 export const RACE_DATE = '2027-03-14';
-export const PLAN_START = '2026-10-05';
+export const PLAN_START = '2026-10-19';
 export const PLAN_END = '2027-03-14';
-export const TOTAL_WEEKS = 23;
+export const TOTAL_WEEKS = 21;
 
 const d = (type: SessionType, title: string, desc = ''): Day => ({ type, title, desc });
 
-export const WEEKS: Week[] = [
+/**
+ * Borrador del plan, escrito con 23 semanas de calendario.
+ *
+ * No se usa directamente: `WEEKS` filtra, renumera y re-fecha estas semanas
+ * sobre el calendario real. Los campos `n` y `start` de este borrador son la
+ * numeración original y sirven de referencia para `KEEP`.
+ */
+const DRAFT_WEEKS: Week[] = [
   {
     n: 1,
     start: '2026-10-05',
@@ -97,13 +104,13 @@ export const WEEKS: Week[] = [
     note: 'Ningún test esta semana. Nada de series fuertes.',
     warn: true,
     days: [
-      d('R', '—', 'Semana no iniciada'),
-      d('C', 'Bici Z2 · 40 min', 'Hoy: medición basal (palpación tibial) + pedir analítica'),
-      d('B', 'Calidad · 3 km', 'Trote continuo RPE 3 + 4×20 s de progresiones'),
-      d('C', 'Cinta · llano / 4,5 km/h × 20 min', 'Sin inclinación en toda la fase 1. Termina con 3×15 bajadas de talón a una pierna'),
-      d('G', 'Gym — torso', 'Arranca la rutina sóleo (ejercicios 1, 3, 5, 6)'),
-      d('R', 'Descanso total + TB', 'Cuenta tu cadencia durante 30 s'),
-      d('A', 'Tirada larga · 5 km', '5×(4 min trote muy suave + 2 min caminata). RPE 3'),
+      d('G', 'Gym — pull', 'Empieza aquí. El sóleo va en las superseries que ya trae tu programa'),
+      d('G', 'Gym — push', 'Cuádriceps a RPE 7-8, nada de fallo. Pide la analítica: vit D, ferritina, calcio, TSH'),
+      d('B', 'Carrera fácil · 3 km', 'Trote continuo RPE 3 + 4×20 s de progresiones. Antes de salir, palpación tibial basal'),
+      d('G', 'Gym — pull + bici Z2', 'Al terminar, 25-30 min de bici sin moverte del sitio. Añade 3×12 bajadas de talón'),
+      d('R', 'Descanso'),
+      d('A', 'Tirada larga · 5 km', '5×(4 min trote muy suave + 2 min caminata). RPE 3. Cuenta la cadencia 30 s'),
+      d('R', 'Descanso + sóleo', 'Bajadas de talón y pelota plantar. Las tibias no deben doler al día siguiente'),
     ],
   },
   {
@@ -492,6 +499,38 @@ export const WEEKS: Week[] = [
     ],
   },
 ];
+
+/* -------------------------------------------------------------------------- */
+/*  Calendario definitivo                                                     */
+/* -------------------------------------------------------------------------- */
+
+const addDaysISO = (iso: string, days: number): string => {
+  const date = new Date(`${iso}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+/**
+ * Qué semanas del borrador entran en el calendario real, en orden.
+ *
+ * El borrador se escribió con 23 semanas y del 19 oct 2026 al 14 mar 2027 hay
+ * 21. Se descartan dos:
+ *   · la 4 — descarga prematura, porque la fase 1 solo llega a 12 km;
+ *   · la 13 — cierre de fiestas, sin valor propio frente a sus vecinas.
+ * Todo lo demás se renumera desde 1 y se re-fecha desde PLAN_START.
+ */
+const KEEP = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
+
+const DRAFT_BY_N = new Map(DRAFT_WEEKS.map((week) => [week.n, week]));
+
+export const WEEKS: Week[] = KEEP.map((sourceN, index) => {
+  const source = DRAFT_BY_N.get(sourceN);
+  if (!source) throw new Error(`Falta la semana ${sourceN} en el borrador del plan.`);
+  return { ...source, n: index + 1, start: addDaysISO(PLAN_START, index * 7) };
+});
 
 /* -------------------------------------------------------------------------- */
 /*  Utilidades                                                                */
