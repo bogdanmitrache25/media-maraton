@@ -33,6 +33,10 @@ LLM_URL = os.environ.get("LLM_URL", "http://127.0.0.1:8081").rstrip("/")
 LLM_MODEL = os.environ.get(
     "LLM_MODEL", "bartowski/Qwen2.5-3B-Instruct-GGUF:Q4_K_M"
 )
+TTS_URL = os.environ.get("TTS_URL", "http://127.0.0.1:8881").rstrip("/")
+TTS_MODEL = os.environ.get("TTS_MODEL", "piper")
+TTS_VOICE = os.environ.get("TTS_VOICE", "es_ES-davefx-medium")
+TTS_MAX_CHARS = int(os.environ.get("TTS_MAX_CHARS", "2500"))
 OFFSET_FILE = os.environ.get("OFFSET_FILE", "/data/offset")
 
 TIME_ZONE = ZoneInfo("Europe/Madrid")
@@ -56,8 +60,64 @@ def tg(method: str, **params: object) -> dict:
         return {"ok": False, "description": response.text}
 
 
+def clean_for_tts(text: str) -> str:
+    value = re.sub(r"```.*?```", " ", text, flags=re.S)
+    value = re.sub(r"https?://\S+", " ", value)
+    value = value.replace("•", ". ").replace("×", " por ")
+    value = value.replace("«", "").replace("»", "")
+    value = re.sub(r"[*_#>`]", "", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    return value[:TTS_MAX_CHARS]
+
+
+def tts_audio(text: str) -> bytes | None:
+    clean = clean_for_tts(text)
+    if not clean:
+        return None
+    try:
+        response = session.post(
+            f"{TTS_URL}/v1/audio/speech",
+            json={
+                "model": TTS_MODEL,
+                "input": clean,
+                "voice": TTS_VOICE,
+                "response_format": "mp3",
+            },
+            timeout=120,
+        )
+        if response.status_code >= 300:
+            log("tts status", response.status_code, response.text[:200])
+            return None
+        return response.content or None
+    except Exception as exc:  # noqa: BLE001
+        log("tts error", type(exc).__name__, exc)
+        return None
+
+
+def send_audio(chat_id: int, audio: bytes) -> None:
+    try:
+        response = session.post(
+            f"{TG_API}/sendAudio",
+            data={
+                "chat_id": str(chat_id),
+                "title": "Coach",
+                "performer": "Media Maratón",
+            },
+            files={"audio": ("coach.mp3", audio, "audio/mpeg")},
+            timeout=120,
+        )
+        data = response.json()
+        if not data.get("ok"):
+            log("sendAudio", data)
+    except Exception as exc:  # noqa: BLE001
+        log("sendAudio error", type(exc).__name__, exc)
+
+
 def reply(chat_id: int, text: str) -> None:
     tg("sendMessage", chat_id=chat_id, text=text[:4096], disable_web_page_preview=True)
+    audio = tts_audio(text)
+    if audio:
+        send_audio(chat_id, audio)
 
 
 def typing(chat_id: int) -> None:
@@ -157,6 +217,30 @@ def save_meal(
     if fat_g is not None:
         payload["fat_g"] = float(fat_g)
     rest_post("meals", payload)
+
+
+def save_activity(
+    steps: int | None = None,
+    sleep_hours: float | None = None,
+    notes: str | None = None,
+    log_date: str | None = None,
+) -> None:
+    payload: dict[str, object] = {
+        "user_id": SUPABASE_USER_ID,
+        "log_date": log_date or today_iso(),
+    }
+    if steps is not None:
+        payload["steps"] = int(steps)
+    if sleep_hours is not None:
+        payload["sleep_hours"] = float(sleep_hours)
+    if notes:
+        payload["notes"] = notes[:300]
+    rest_post(
+        "daily_activity",
+        payload,
+        on_conflict="user_id,log_date",
+        prefer="resolution=merge-duplicates,return=representation",
+    )
 
 
 def upload_photo(file_id: str, view: str, notes: str | None) -> str:
@@ -373,6 +457,25 @@ def parse_metrics(text: str) -> dict[str, float]:
                 values["weight_kg"] = value
 
     return values
+
+
+def parse_steps(text: str) -> int | None:
+    low = text.lower()
+    if "paso" not in low and "step" not in low:
+        return None
+    match = re.search(r"(\d{1,3}(?:[.,]\d{3})+|\d+)\s*(?:pasos|paso|steps?)", low)
+    if not match:
+        return None
+    raw = match.group(1)
+    if re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", raw):
+        raw = re.sub(r"[.,]", "", raw)
+    else:
+        raw = raw.replace(",", ".")
+    try:
+        value = int(float(raw))
+    except ValueError:
+        return None
+    return value if 0 <= value <= 100000 else None
 
 
 # ---------------------------------------------------------------------------
@@ -669,6 +772,16 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
         except Exception as exc:  # noqa: BLE001
             log("metric save error", type(exc).__name__, exc)
             reply(chat_id, "No he podido guardar la medición.")
+        return
+
+    steps = parse_steps(clean)
+    if steps is not None:
+        try:
+            save_activity(steps=steps)
+            reply(chat_id, f"Pasos guardados: {steps:,}".replace(",", ".") + " (hoy).")
+        except Exception as exc:  # noqa: BLE001
+            log("steps save error", type(exc).__name__, exc)
+            reply(chat_id, "No he podido guardar los pasos.")
         return
 
     # Preguntas de progreso: respuesta determinista con los datos reales.
