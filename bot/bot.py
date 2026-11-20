@@ -243,6 +243,29 @@ def save_activity(
     )
 
 
+def save_training_session(
+    kind: str,
+    notes: str,
+    duration_min: int | None = None,
+    rpe: float | None = None,
+    session_date: str | None = None,
+) -> None:
+    if kind not in {"push", "pull", "legs", "run", "other"}:
+        kind = "other"
+    payload: dict[str, object] = {
+        "user_id": SUPABASE_USER_ID,
+        "session_date": session_date or today_iso(),
+        "kind": kind,
+        "notes": notes[:2000],
+        "source": "telegram",
+    }
+    if duration_min is not None:
+        payload["duration_min"] = int(duration_min)
+    if rpe is not None:
+        payload["rpe"] = float(rpe)
+    rest_post("training_sessions", payload)
+
+
 def upload_photo(file_id: str, view: str, notes: str | None) -> str:
     info = tg("getFile", file_id=file_id)
     if not info.get("ok"):
@@ -485,11 +508,14 @@ def parse_steps(text: str) -> int | None:
 def llm_chat(chat_id: int, text: str) -> str | None:
     context = progress_context() or "sin datos todavía"
     system = (
-        "Eres un asistente breve de entrenamiento y nutrición. Responde en español, "
-        "en 2-4 frases, con tono cercano y sin rodeos. Usa solo este contexto real: "
-        f"{context}. Si no hay datos, dilo. No inventes cifras ni des consejos médicos. "
-        "Si el mensaje va de la voz del bot o de elegir una voz, confirma la elección "
-        "y no hables de pesajes ni comidas."
+        "Eres un coach real de entrenamiento y nutrición. Responde en español de España, "
+        "en 2-4 frases, con tono cercano y sin rodeos. No repitas literalmente al usuario. "
+        "Usa solo este contexto real: "
+        f"{context}. Si no hay datos, dilo. No inventes cifras ni planes ni des consejos médicos. "
+        "Si el usuario dice que se pesará o que entrenará, responde a eso; no digas que "
+        "no hay pesajes. Usa 'me enviarás', no 'te enviarás'. No uses la palabra 'dieta' "
+        "salvo que el usuario la use. Si el mensaje va de la voz del bot o de elegir una voz, "
+        "confirma la elección y no hables de pesajes ni comidas."
     )
     messages: list[dict[str, str]] = [{"role": "system", "content": system}]
     messages.extend(history.get(chat_id, [])[-6:])
@@ -751,6 +777,141 @@ def handle_text_fallback(chat_id: int, text: str, source: str = "text") -> None:
     reply(chat_id, prefix + "No he guardado nada. Dime qué quieres registrar o pregúntame.")
 
 
+def handle_completed_training(chat_id: int, text: str) -> bool:
+    """Sesión ya hecha: guarda el relato tal cual para no perderlo."""
+    low = text.lower()
+    markers = (
+        "he entrenado",
+        "he hecho push",
+        "he hecho pull",
+        "he hecho legs",
+        "he hecho piernas",
+        "acabo de entrenar",
+        "vuelvo del gym",
+        "vuelvo del gimnasio",
+        "he terminado el entreno",
+        "he terminado de entrenar",
+        "he corrido",
+        "acabo de correr",
+        "he salido a correr",
+        "sesión de push",
+        "sesion de push",
+        "sesión de pull",
+        "sesion de pull",
+        "sesión de legs",
+        "sesion de legs",
+    )
+    if not any(marker in low for marker in markers):
+        return False
+
+    if "push" in low:
+        kind = "push"
+    elif "pull" in low:
+        kind = "pull"
+    elif "legs" in low or "pierna" in low:
+        kind = "legs"
+    elif "corrido" in low or "correr" in low or "cinta" in low:
+        kind = "run"
+    else:
+        kind = "other"
+
+    labels = {"push": "push", "pull": "pull", "legs": "legs", "run": "carrera", "other": "entreno"}
+    try:
+        save_training_session(kind, text)
+        detail = (
+            "distancia, tiempo, ritmo, pulso y RPE"
+            if kind == "run"
+            else "ejercicios, series, peso y RPE"
+        )
+        reply(
+            chat_id,
+            f"Sesión registrada: {labels[kind]}. He guardado el texto; cuando quieras "
+            f"la estructuramos por {detail}.",
+        )
+    except Exception as exc:  # noqa: BLE001
+        log("training save error", type(exc).__name__, exc)
+        reply(chat_id, "No he podido guardar la sesión. Revisa el log del servidor.")
+    return True
+
+
+def handle_plan_talk(chat_id: int, text: str) -> bool:
+    """Charla de planificación: entreno de esta tarde, pesaje de mañana, etc."""
+    low = text.lower()
+    training = any(
+        key in low
+        for key in (
+            "voy a entrenar",
+            "voy al gym",
+            "voy al gimnasio",
+            "esta tarde entreno",
+            "hoy entreno",
+            "voy a hacer push",
+            "voy a hacer pull",
+            "voy a hacer legs",
+            "voy a hacer piernas",
+            "haré push",
+            "haré pull",
+            "haré legs",
+            "haré piernas",
+            "entrenaré",
+            "entrenar",
+        )
+    )
+    weigh = any(
+        key in low
+        for key in (
+            "mañana me peso",
+            "mañana me pesare",
+            "mañana me pesaré",
+            "mañana por la mañana",
+            "mañana en ayunas",
+            "después del pesaje",
+            "despues del pesaje",
+            "mañana te mando las fotos",
+            "mañana las fotos",
+            "mañana mandaré las fotos",
+            "mañana mandare las fotos",
+        )
+    )
+
+    if training and weigh:
+        reply(
+            chat_id,
+            "Perfecto. Esta tarde, cuando vuelvas del push o pull, me cuentas qué has hecho "
+            "y lo registramos. Mañana en ayunas me mandas el BodyTrax, las medidas, las fotos "
+            "y la cinta. Aquí estoy.",
+        )
+        return True
+
+    if training:
+        if "push" in low and "pull" in low:
+            session = "push o pull"
+        elif "push" in low:
+            session = "push"
+        elif "pull" in low:
+            session = "pull"
+        elif "legs" in low or "pierna" in low:
+            session = "legs"
+        else:
+            session = "la sesión"
+        reply(
+            chat_id,
+            f"Perfecto. Cuando termines {session}, cuéntame ejercicios, series, peso y RPE "
+            "y lo registramos.",
+        )
+        return True
+
+    if weigh:
+        reply(
+            chat_id,
+            "Perfecto. Mañana en ayunas con el BodyTrax, las medidas, las fotos y la cinta. "
+            "Te espero por aquí.",
+        )
+        return True
+
+    return False
+
+
 def handle_text(chat_id: int, text: str, source: str = "text") -> None:
     clean = " ".join(text.strip().split())
     if not clean:
@@ -806,6 +967,9 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
             reply(chat_id, "No he podido guardar los pasos.")
         return
 
+    if handle_completed_training(chat_id, clean):
+        return
+
     # Preguntas de progreso: respuesta determinista con los datos reales.
     low = clean.lower()
     progress_phrases = (
@@ -827,6 +991,9 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
             chat_id,
             ("Esto es lo que tengo: " + context + ".") if context else "Todavía no tengo datos.",
         )
+        return
+
+    if handle_plan_talk(chat_id, clean):
         return
 
     typing(chat_id)
