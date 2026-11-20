@@ -200,6 +200,25 @@ def parse_number(raw: str) -> float:
     return float(raw.replace(",", "."))
 
 
+GREETINGS = {
+    "hola",
+    "buenas",
+    "hey",
+    "buenos dias",
+    "buenos días",
+    "buenas tardes",
+    "buenas noches",
+    "que tal",
+    "qué tal",
+    "hola bot",
+}
+
+MEAL_PREFIX = (
+    r"(?:/?(?:comida|he comido|desayuno|desayuné|desayune|almuerzo|almorcé|almorce|"
+    r"cena|cené|cene|merienda|merendé|merende|snack|comí|comi))"
+)
+
+
 def handle_text(chat_id: int, text: str, source: str = "text") -> None:
     clean = " ".join(text.strip().split())
     low = clean.lower()
@@ -208,8 +227,21 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
         reply(chat_id, "No he entendido nada. Prueba con /ayuda.")
         return
 
-    if low in {"/start", "start", "/ayuda", "ayuda", "help", "/help"}:
+    normalized = low.strip(" !¡?¿.")
+
+    if normalized in {"/start", "start", "/ayuda", "ayuda", "help", "/help"}:
         reply(chat_id, HELP)
+        return
+
+    if normalized in GREETINGS:
+        reply(
+            chat_id,
+            "Hola. Estoy listo. Para registrar:\n"
+            "• peso 82,5\n"
+            "• comida pollo con arroz\n"
+            "• medidas cintura=88 cadera=95\n"
+            "• /ayuda",
+        )
         return
 
     # Medidas en bloque: "medidas cintura=88 cadera=95 ..."
@@ -229,10 +261,13 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
         reply(chat_id, "Medidas guardadas: " + " · ".join(labels))
         return
 
-    # Comida explícita.
-    meal_match = re.match(r"^/?(comida|he comido|desayuno|almuerzo|cena|merienda)\s*[:\-]?\s*(.+)$", clean, re.I)
+    # Comida explícita: "comida ...", "he comido ...", "desayuno ...", etc.
+    meal_match = re.match(MEAL_PREFIX + r"\s*[:\-]?\s*(.*)$", clean, re.I)
     if meal_match:
-        description = meal_match.group(2).strip()
+        description = meal_match.group(1).strip(" .:-")
+        if not description:
+            reply(chat_id, "¿Qué has comido? Escríbelo detrás: comida pollo con arroz.")
+            return
         save_meal(description)
         reply(chat_id, f"Comida registrada: «{description[:300]}».")
         return
@@ -246,10 +281,13 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
             reply(chat_id, f"Guardado: {name} {match.group(1).replace('.', ',')} (hoy).")
             return
 
-    # Si es texto libre, lo tratamos como comida: es el uso diario del bot.
-    save_meal(clean)
+    # Si no es nada claro, no inventamos: pedimos la intención explícita.
     prefix = "Transcripción: «%s».\n" % clean if source == "voice" else ""
-    reply(chat_id, prefix + f"Comida registrada: «{clean[:300]}».")
+    reply(
+        chat_id,
+        prefix + "No he guardado nada. Para comida: «comida pollo con arroz». "
+        "Para medidas: «peso 82,5». /ayuda",
+    )
 
 
 def photo_view(caption: str) -> tuple[str, str | None]:
