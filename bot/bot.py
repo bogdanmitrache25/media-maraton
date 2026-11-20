@@ -413,7 +413,7 @@ def llm_chat(chat_id: int, text: str) -> str | None:
 
 MEAL_SYSTEM = """Devuelve SOLO un JSON válido, sin markdown ni texto fuera del JSON.
 Si el mensaje describe comida o bebida, devuelve:
-{"type":"meal","description":"solo los alimentos, sin 'he desayunado', 'hoy' ni la hora","calories":null,"protein_g":null,"carbs_g":null,"fat_g":null}
+{"type":"meal","description":"resumen limpio y breve, separando los alimentos con comas; sin 'he desayunado', 'hoy', horas, muletillas ni repeticiones; conserva las marcas si las dice","calories":null,"protein_g":null,"carbs_g":null,"fat_g":null}
 Si no describe comida, devuelve:
 {"type":"none"}
 No inventes calorías ni macros: usa null si el usuario no los dice."""
@@ -433,7 +433,37 @@ def clean_meal_description(description: str) -> str:
         text,
         flags=re.I,
     )
-    return text.strip(" .:-")
+    text = re.sub(r"\bun me he tomado\b", "me he tomado", text, flags=re.I)
+    text = re.sub(r"\botro me he tomado\b", "me he tomado", text, flags=re.I)
+    text = re.sub(r"\bme he tomado\b", "", text, flags=re.I)
+    text = re.sub(r"\bhe tomado\b", "", text, flags=re.I)
+    text = re.sub(r"\bcon la creatina\b", "con creatina", text, flags=re.I)
+    text = re.sub(r"\bleches natada\b", "leche y nata", text, flags=re.I)
+    text = re.sub(r"\bmercadona\b", "Mercadona", text, flags=re.I)
+
+    items: list[str] = []
+    counts: dict[str, int] = {}
+    for part in re.split(r"[,;]+", text):
+        item = " ".join(part.strip(" .:-").split())
+        item = re.sub(r"^(un|una|unos|unas|otro|otra)\s+", "", item, flags=re.I)
+        item = re.sub(r"^(me he tomado|he tomado)\s+", "", item, flags=re.I)
+        item = re.sub(r"^(un|una|unos|unas)\s+", "", item, flags=re.I)
+        item = item.strip(" .:-")
+        if not item:
+            continue
+        item = item[0].upper() + item[1:]
+        key = item.lower()
+        if key in counts:
+            counts[key] += 1
+        else:
+            counts[key] = 1
+            items.append(item)
+
+    out: list[str] = []
+    for item in items:
+        times = counts[item.lower()]
+        out.append(f"{item} (x{times})" if times > 1 else item)
+    return "; ".join(out)
 
 
 def llm_meal(text: str) -> dict | None:
