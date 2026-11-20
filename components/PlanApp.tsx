@@ -458,6 +458,10 @@ export function PlanApp({
             </button>
           </div>
 
+          <a className="btn" href="/progreso" style={{ marginBottom: 10 }}>
+            Progreso y comidas
+          </a>
+
           <form action="/auth/signout" method="post">
             <button className="btn" type="submit">
               Cerrar sesión
@@ -471,6 +475,9 @@ export function PlanApp({
         <TabButton id="plan" label="Plan" tab={tab} setTab={setTab} />
         <TabButton id="pre" label="Protección" tab={tab} setTab={setTab} />
         <TabButton id="reg" label="Registro" tab={tab} setTab={setTab} />
+        <a href="/progreso" aria-label="Progreso y comidas">
+          Progreso
+        </a>
       </nav>
 
       {editing && (

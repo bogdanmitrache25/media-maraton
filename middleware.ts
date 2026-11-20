@@ -28,7 +28,7 @@ function cspFor(nonce: string, supabaseHost: string, isDev: boolean) {
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' ${isDev ? "'unsafe-eval'" : ''}`,
     // Next.js inyecta estilos en línea; no hay forma limpia de evitarlo.
     `style-src 'self' 'unsafe-inline'`,
-    `img-src 'self' data: blob: https://*.googleusercontent.com https://*.supabase.co`,
+    `img-src 'self' data: blob: https://*.googleusercontent.com https://*.supabase.co https://${supabaseHost}`,
     `font-src 'self' data:`,
     `connect-src 'self' https://${supabaseHost} wss://${supabaseHost}`,
     `frame-ancestors 'none'`,

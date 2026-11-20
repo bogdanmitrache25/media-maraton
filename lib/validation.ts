@@ -105,3 +105,49 @@ export function parseSessionKey(key: string): { week: number; day: number } | nu
   if (week < 1 || week > 23 || day < 0 || day > 6) return null;
   return { week, day };
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Progreso corporal y comidas                                                */
+/* -------------------------------------------------------------------------- */
+
+const ISO_DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha no válida');
+
+const optionalNumber = (min: number, max: number) =>
+  z.number().min(min).max(max).nullable();
+
+/**
+ * Medición corporal. Todos los campos salvo la fecha son opcionales: el
+ * BodyTrax no siempre da los mismos, y las medidas de cinta se van añadiendo
+ * poco a poco.
+ */
+export const bodyMetricSchema = z.object({
+  measuredOn: ISO_DATE,
+  weightKg: optionalNumber(30, 250),
+  bodyFatPct: optionalNumber(3, 60),
+  muscleMassKg: optionalNumber(10, 120),
+  waterPct: optionalNumber(20, 75),
+  visceralFat: optionalNumber(1, 30),
+  boneMassKg: optionalNumber(1, 10),
+  bmrKcal: z.number().int().min(800).max(5000).nullable(),
+  waistCm: optionalNumber(30, 200),
+  hipCm: optionalNumber(30, 200),
+  chestCm: optionalNumber(30, 200),
+  thighCm: optionalNumber(20, 120),
+  armCm: optionalNumber(15, 80),
+  calfCm: optionalNumber(20, 80),
+  notes: z
+    .string()
+    .trim()
+    .max(500)
+    .nullable()
+    .transform((v) => (v === null || v === '' ? null : v)),
+});
+
+export const mealSchema = z.object({
+  eatenAt: z.string().min(1),
+  description: z.string().trim().min(1, 'Escribe qué has comido').max(500),
+  calories: z.number().int().min(0).max(10000).nullable(),
+  proteinG: optionalNumber(0, 500),
+  carbsG: optionalNumber(0, 1000),
+  fatG: optionalNumber(0, 500),
+});

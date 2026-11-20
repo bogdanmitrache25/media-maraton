@@ -30,8 +30,8 @@ export default async function LoginPage({
         </h1>
 
         <p className="lede">
-          El plan completo, semana a semana, y el protocolo de prevención de periostitis tibial.
-          Crea tu cuenta y lleva tu progreso desde cualquier dispositivo.
+          El plan completo, semana a semana, el protocolo de prevención y tu progreso corporal.
+          Acceso privado desde cualquier dispositivo.
         </p>
 
         <AuthForm next={next} />
