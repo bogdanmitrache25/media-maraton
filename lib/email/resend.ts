@@ -21,7 +21,7 @@ export type SendResult = { ok: true; id: string } | { ok: false; error: string }
  * sin él, `onboarding@resend.dev` solo entrega al correo dueño de la cuenta.
  */
 function sender(): string {
-  return process.env.DIGEST_FROM ?? 'Media Maratón 1:50 <onboarding@resend.dev>';
+    return process.env.DIGEST_FROM ?? 'Media Maratón 1:55 <onboarding@resend.dev>';
 }
 
 /**

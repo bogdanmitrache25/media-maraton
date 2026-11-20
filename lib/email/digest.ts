@@ -160,7 +160,7 @@ export function buildDigest(input: DigestInput): {
 
       <tr><td style="padding-bottom:20px;">
         <p style="margin:0;font-family:${SANS};font-size:19px;font-weight:800;letter-spacing:-0.02em;color:${INK};">
-          MM <span style="color:${SIGNAL};">1:50</span>
+          MM <span style="color:${SIGNAL};">1:55</span>
         </p>
         <p style="margin:4px 0 0;font-family:${MONO};font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:${INK_MID};">
           ${dateLabel} · ${name}

@@ -1,6 +1,6 @@
-# Media Maratón 1:50
+# Media Maratón 1:55
 
-Plan de entrenamiento de 23 semanas para correr una media maratón en 1:50 y prevenir la
+Plan de entrenamiento de 21 semanas para correr una media maratón en 1:55-2:00 y prevenir la
 periostitis tibial, convertido en aplicación web multiusuario.
 
 Cada atleta crea su cuenta, ve su plan y guarda su propio progreso. Nadie ve los datos de nadie.
@@ -43,7 +43,7 @@ Los grises están calibrados para superar **WCAG AA** sobre su fondo real (la le
 es la voz de la interfaz, no puede ser un gris decorativo). Verificado con medición automática de
 ratios en ambos temas.
 
-**Elemento firma.** Las 23 semanas del plan son una tira de barras en la cabecera que se van
+**Elemento firma.** Las 21 semanas del plan son una tira de barras en la cabecera que se van
 llenando a lo largo de cinco meses. Cada semana deja su muesca aunque esté a cero, de modo que la
 tira se lee como una regla de medición y no como una fila de cajas vacías.
 
@@ -295,7 +295,7 @@ components/
   PreventionTab.tsx       Protocolo de prevención
   ThemeToggle.tsx         Conmutador papel / tinta
 lib/
-  plan-data.ts            Las 23 semanas (datos puros)
+  plan-data.ts            Las 21 semanas (datos puros)
   export.ts               Informe en Markdown para pasar a una IA
   theme.ts                Constante y tipos del tema
   email/digest.ts         Construye el correo diario (HTML y texto)

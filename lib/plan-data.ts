@@ -1,5 +1,5 @@
 /**
- * Datos del plan de 23 semanas.
+ * Datos del plan de 21 semanas.
  *
  * Este módulo es puro: no importa nada de React ni de Supabase, así que puede
  * usarse indistintamente en servidor y en cliente.
@@ -7,7 +7,7 @@
 
 import type { GymKey } from '@/lib/gym-data';
 
-export type SessionType = 'A' | 'B' | 'C' | 'G' | 'R' | 'T' | 'Z';
+export type SessionType = 'A' | 'B' | 'C' | 'E' | 'G' | 'R' | 'T' | 'Z';
 
 export interface Day {
   /** Tipo de sesión. */
@@ -21,7 +21,7 @@ export interface Day {
 }
 
 export interface Week {
-  /** Número de semana, 1 a 23. */
+  /** Número de semana, 1 a 21. */
   n: number;
   /** Lunes de esa semana, en formato ISO (YYYY-MM-DD). */
   start: string;
@@ -53,6 +53,7 @@ export const SESSION_TYPES: Record<SessionType, { label: string; bar: string }> 
   A: { label: 'LARGA', bar: '#f97316' },
   B: { label: 'CALIDAD', bar: '#ef4444' },
   C: { label: 'CROSS', bar: '#06b6d4' },
+  E: { label: 'FÁCIL', bar: '#84cc16' },
   G: { label: 'GYM', bar: '#8b5cf6' },
   R: { label: 'DESCANSO', bar: '#475569' },
   T: { label: 'TEST', bar: '#eab308' },
@@ -67,6 +68,7 @@ export const SESSION_CODE: Record<SessionType, string> = {
   A: 'FONDO',
   B: 'CALIDAD',
   C: 'CRUCE',
+  E: 'FÁCIL',
   G: 'FUERZA',
   R: 'LIBRE',
   T: 'TEST',
@@ -77,6 +79,7 @@ export const SESSION_CODE: Record<SessionType, string> = {
 export const SESSION_INTENSITY: Record<SessionType, 0 | 1 | 2 | 3> = {
   R: 0,
   C: 1,
+  E: 1,
   G: 1,
   A: 2,
   B: 2,
@@ -92,423 +95,6 @@ export const TOTAL_WEEKS = 21;
 const d = (type: SessionType, title: string, desc = '', gym?: GymKey): Day =>
   gym ? { type, title, desc, gym } : { type, title, desc };
 
-/**
- * Borrador del plan, escrito con 23 semanas de calendario.
- *
- * No se usa directamente: `WEEKS` filtra, renumera y re-fecha estas semanas
- * sobre el calendario real. Los campos `n` y `start` de este borrador son la
- * numeración original y sirven de referencia para `KEEP`.
- */
-const DRAFT_WEEKS: Week[] = [
-  {
-    n: 1,
-    start: '2026-10-05',
-    km: '8 km',
-    phase: 1,
-    focus: 'Empezar y montar el protocolo',
-    note: 'Ningún test esta semana. Nada de series fuertes.',
-    warn: true,
-    days: [
-      d('G', 'Gym · pull', 'Empieza aquí. El sóleo va en las superseries que ya trae tu programa', 'pull-a'),
-      d('G', 'Gym · push', 'Cuádriceps a RPE 7-8, nada de fallo. Pide la analítica: vit D, ferritina, calcio, TSH', 'push-a'),
-      d('B', 'Carrera fácil · 3 km', 'Trote continuo RPE 3 + 4×20 s de progresiones. Antes de salir, palpación tibial basal'),
-      d('G', 'Gym · pull + bici Z2', 'Al terminar, 25-30 min de bici sin moverte del sitio. Añade 3×12 bajadas de talón', 'pull-b'),
-      d('R', 'Descanso'),
-      d('A', 'Tirada larga · 5 km', '5×(4 min trote muy suave + 2 min caminata). RPE 3. Cuenta la cadencia 30 s'),
-      d('R', 'Descanso + sóleo', 'Bajadas de talón y pelota plantar. Las tibias no deben doler al día siguiente'),
-    ],
-  },
-  {
-    n: 2,
-    start: '2026-10-12',
-    km: '8 km',
-    phase: 1,
-    focus: 'Igual que S1, un poco más largo',
-    days: [
-      d('G', 'Gym — pierna pesada'),
-      d('C', 'Bici Z2 · 45 min'),
-      d('B', 'Calidad · 3 km', 'Trote continuo RPE 3-4 + 4×20 s de progresiones'),
-      d('C', 'Cinta · llano / 4,5 km/h × 25 min', 'Sin inclinación. 3×15 bajadas de talón a una pierna al terminar'),
-      d('G', 'Gym — torso', 'Rutina sóleo'),
-      d('R', 'Descanso total + TB'),
-      d('A', 'Tirada larga · 5 km', '5×(4 min trote + 2 min caminata). RPE 3-4'),
-    ],
-  },
-  {
-    n: 3,
-    start: '2026-10-19',
-    km: '12 km',
-    phase: 1,
-    focus: 'Primera tirada continua sin caminata',
-    days: [
-      d('G', 'Gym — pierna pesada'),
-      d('C', 'Bici Z2 · 50 min'),
-      d('B', 'Calidad · 5 km', '2 km fácil + 4×(2 min RPE 5-6 / 2 min fácil) + 1 km fácil'),
-      d('C', 'Cinta · llano / 4,8 km/h × 30 min', 'Sin inclinación. 3×15 bajadas de talón a una pierna al terminar'),
-      d('G', 'Gym — torso', 'Rutina sóleo 4×/sem'),
-      d('R', 'Descanso total + TB', 'Revisa tu calzado: necesitas 2 pares en rotación'),
-      d('A', 'Tirada larga · 7 km', 'Rodaje continuo RPE 4 (sin caminata)'),
-    ],
-  },
-  {
-    n: 4,
-    start: '2026-10-26',
-    km: '9 km',
-    phase: 1,
-    focus: 'Primera descarga',
-    note: 'Sin cinta inclinada en toda la fase 1. Cierre: repite el test de palpación y calcula el ACWR.',
-    days: [
-      d('G', 'Gym — pierna ligera'),
-      d('C', 'Bici Z2 · 40 min'),
-      d('B', 'Calidad · 3,5 km', 'Rodaje suave RPE 3 + 4×20 s de progresiones'),
-      d('R', 'Descanso + TB', 'Sin cinta inclinada'),
-      d('G', 'Gym — torso'),
-      d('R', 'Descanso total + TB'),
-      d('A', 'Tirada larga · 5,5 km', 'Rodaje muy suave RPE 3'),
-    ],
-  },
-  {
-    n: 5,
-    start: '2026-11-02',
-    km: '15 km',
-    phase: 2,
-    focus: 'Construir motor, la carrera crece despacio',
-    days: [
-      d('G', 'Gym — pierna pesada'),
-      d('C', 'Bici Z2 · 60 min'),
-      d('B', 'Calidad · 7 km', '2 km fácil + 3×(3 min RPE 6 / 2 min fácil) + 2 km fácil'),
-      d('C', 'Cinta · 10 % / 4,0 km/h × 35 min', 'Vuelve la inclinación, y suave. Si la tibia dice algo, vuelve a llano sin dudar'),
-      d('G', 'Gym — torso', 'Empieza el colágeno + vit C 45-60 min antes de las cargas'),
-      d('R', 'Descanso total + TB'),
-      d('A', 'Tirada larga · 8 km', 'Rodaje continuo Z2. RPE 4'),
-    ],
-  },
-  {
-    n: 6,
-    start: '2026-11-09',
-    km: '17 km',
-    phase: 2,
-    focus: 'Semana de control',
-    note: 'Si aparece cualquier amarillo, en la S7 NO subes volumen.',
-    warn: true,
-    days: [
-      d('G', 'Gym — pierna pesada'),
-      d('C', 'Bici Z2 · 60 min'),
-      d('B', 'Calidad · 8 km', '3 km fácil + 5×(2 min RPE 6-7 / 90 s fácil) + 1 km fácil'),
-      d('C', 'Cinta · 12 % / 4,0 km/h × 35 min'),
-      d('G', 'Gym — torso'),
-      d('R', 'Descanso total + TB', 'Primera revisión formal del semáforo de dolor'),
-      d('A', 'Tirada larga · 9 km', '7 km Z2 + 2 km finales a RPE 5-6'),
-    ],
-  },
-  {
-    n: 7,
-    start: '2026-11-16',
-    km: '18 km',
-    phase: 2,
-    test: true,
-    focus: 'TEST 5K — se recalibra todo',
-    note: 'Con el resultado, recalcula toda la tabla de ritmos.',
-    days: [
-      d('G', 'Gym — pierna ligera', 'Nada pesado: hay test el miércoles'),
-      d('R', 'Descanso o bici 30 min muy suave'),
-      d(
-        'T',
-        'TEST DE 5K EN CINTA',
-        '15 min calentamiento progresivo + 5K a tope controlado + 10 min enfriamiento',
-      ),
-      d('R', 'Descanso + TB'),
-      d('G', 'Gym — torso'),
-      d('R', 'Descanso total'),
-      d('A', 'Tirada larga · 10 km', 'Rodaje suave Z2'),
-    ],
-  },
-  {
-    n: 8,
-    start: '2026-11-23',
-    km: '15 km',
-    phase: 2,
-    focus: 'Descarga',
-    days: [
-      d('G', 'Gym — pierna ligera'),
-      d('C', 'Bici Z2 · 45 min'),
-      d('B', 'Calidad · 7 km', '3 km fácil + 6×(1 min RPE 7 / 1 min fácil) + 1 km fácil'),
-      d('C', 'Cinta · 10 % / 4,0 km/h × 25 min'),
-      d('G', 'Gym — torso'),
-      d('R', 'Descanso total + TB + masaje'),
-      d('A', 'Tirada larga · 8 km', 'Rodaje suave Z2'),
-    ],
-  },
-  {
-    n: 9,
-    start: '2026-11-30',
-    km: '21 km',
-    phase: 2,
-    focus: 'Empieza la especificidad: primeros intervalos de verdad',
-    days: [
-      d('G', 'Gym — pierna pesada'),
-      d('C', 'Bici Z2 · 65 min'),
-      d('B', 'Calidad · 10 km', '3 km fácil + 3×2000 m RPE 7 (rec 2 min trote) + 1 km fácil'),
-      d('C', 'Cinta · 15 % / 4,0 km/h × 40 min'),
-      d('G', 'Gym — torso'),
-      d('R', 'Descanso total + TB', 'Añade los pogo hops (ejercicio 7). Cadencia objetivo 176'),
-      d('A', 'Tirada larga · 11 km', '8 km Z2 + 3 km a RPE 6'),
-    ],
-  },
-  {
-    n: 10,
-    start: '2026-12-07',
-    km: '24 km',
-    phase: 2,
-    focus: 'Volumen alto de fase 2',
-    days: [
-      d('G', 'Gym — pierna pesada'),
-      d('C', 'Bici Z2 · 70 min'),
-      d('B', 'Calidad · 12 km', '3 km fácil + 3×3000 m RPE 7 (rec 2 min) + 1 km fácil'),
-      d('C', 'Cinta · 15 % / 4,2 km/h × 45 min'),
-      d('G', 'Gym — torso'),
-      d('R', 'Descanso total + TB', 'Revisa los km de tus zapatillas'),
-      d('A', 'Tirada larga · 12 km', '8 km Z2 + 4 km a ritmo steady (RPE 5)'),
-    ],
-  },
-  {
-    n: 11,
-    start: '2026-12-14',
-    km: '20 km',
-    phase: 2,
-    focus: 'Descarga (Navidad)',
-    note: 'En vacaciones, la rutina tibial es lo ÚLTIMO que se sacrifica. Cuidado con el alcohol.',
-    warn: true,
-    days: [
-      d('G', 'Gym — pierna ligera'),
-      d('C', 'Bici Z2 · 45 min'),
-      d('B', 'Calidad · 10 km', '3 km fácil + 4×1000 m RPE 6-7 (rec 90 s) + 1 km fácil'),
-      d('R', 'Descanso + TB'),
-      d('G', 'Gym — torso'),
-      d('R', 'Descanso total'),
-      d('A', 'Tirada larga · 10 km', 'Rodaje Z2 suave'),
-    ],
-  },
-  {
-    n: 12,
-    start: '2026-12-21',
-    km: '25 km',
-    phase: 3,
-    focus: 'Primer bloque a ritmo de media maratón',
-    days: [
-      d('G', 'Gym — pierna pesada'),
-      d('C', 'Bici Z2 · 60 min'),
-      d('B', 'Calidad · 12 km', '4 km fácil + 4×1500 m RPE 7-8 (rec 2 min) + 1 km fácil'),
-      d('C', 'Cinta · 15 % / 4,2 km/h × 45 min'),
-      d('G', 'Gym — torso', '(o descanso: es Navidad)'),
-      d('R', 'Descanso total + TB', 'Vigila el sueño en fiestas'),
-      d('A', 'Tirada larga · 13 km', '8 km Z2 + 5 km a ritmo de media maratón (5:13/km)'),
-    ],
-  },
-  {
-    n: 13,
-    start: '2026-12-28',
-    km: '28 km',
-    phase: 3,
-    focus: 'Cierre de fiestas',
-    days: [
-      d('G', 'Gym — pierna pesada'),
-      d('C', 'Bici Z2 · 60 min'),
-      d('B', 'Calidad · 14 km', '4 km fácil + 2×4000 m RPE 7 (rec 2 min) + 1 km fácil'),
-      d('C', 'Cinta · 15 % / 4,2 km/h × 45 min'),
-      d('G', 'Gym — torso', '(o descanso)'),
-      d('R', 'Descanso total + TB', 'Test de palpación tibial'),
-      d('A', 'Tirada larga · 14 km', '8 km Z2 + 6 km a ritmo de media maratón'),
-    ],
-  },
-  {
-    n: 14,
-    start: '2027-01-04',
-    km: '22 km',
-    phase: 3,
-    test: true,
-    focus: 'CHECKPOINT DEL OBJETIVO. Aquí decidimos',
-    note: '10K ≤ 49:00 → seguimos a 1:50 · 49-53 → 1:55 · >53 → 2:00-2:05.',
-    warn: true,
-    days: [
-      d('G', 'Gym — pierna ligera'),
-      d('R', 'Descanso o bici 30 min muy suave'),
-      d(
-        'T',
-        'TEST DE 10K',
-        '15 min calentamiento progresivo + 10K a tope controlado + 10 min enfriamiento',
-      ),
-      d('R', 'Descanso + TB'),
-      d('G', 'Gym — torso', 'Repite analítica (ferritina + vitamina D)'),
-      d('R', 'Descanso total'),
-      d('A', 'Tirada larga · 9 km', 'Rodaje suave Z2'),
-    ],
-  },
-  {
-    n: 15,
-    start: '2027-01-11',
-    km: '30 km',
-    phase: 3,
-    focus: 'Primera semana con bloques largos a ritmo de carrera',
-    note: 'Si aparece amarillo, corta el bloque de ritmo y termina en Z2.',
-    days: [
-      d('G', 'Gym — pierna pesada'),
-      d('C', 'Bici Z2 · 65 min'),
-      d('B', 'Calidad · 15 km', '4 km fácil + 5×2000 m a ritmo umbral (Z4) (rec 90 s) + 2 km fácil'),
-      d('C', 'Cinta · 15 % / 4,5 km/h × 45 min'),
-      d('G', 'Gym — torso'),
-      d('R', 'Descanso total + TB'),
-      d('A', 'Tirada larga · 15 km', '8 km Z2 + 7 km a ritmo de media maratón'),
-    ],
-  },
-  {
-    n: 16,
-    start: '2027-01-18',
-    km: '25 km',
-    phase: 3,
-    focus: 'Descarga',
-    days: [
-      d('G', 'Gym — pierna ligera'),
-      d('C', 'Bici Z2 · 50 min'),
-      d('B', 'Calidad · 13 km', '4 km fácil + 6×1000 m a ritmo Z4 (rec 90 s) + 2 km fácil'),
-      d('C', 'Cinta · 12 % / 4,2 km/h × 30 min'),
-      d('G', 'Gym — torso', 'Revisión de calzado: recambio si un par pasa de 600 km'),
-      d('R', 'Descanso total + TB + masaje'),
-      d('A', 'Tirada larga · 12 km', 'Rodaje Z2 suave'),
-    ],
-  },
-  {
-    n: 17,
-    start: '2027-01-25',
-    km: '33 km',
-    phase: 3,
-    focus: 'PICO DE FASE',
-    note: 'Semana dura: duerme 8 h, sube proteína a 1,8 g/kg, vigila el semáforo al máximo.',
-    warn: true,
-    days: [
-      d('G', 'Gym — pierna pesada'),
-      d('C', 'Bici Z2 · 60 min'),
-      d('B', 'Calidad · 16 km', '4 km fácil + 2×5000 m a ritmo de media maratón (rec 3 min) + 2 km fácil'),
-      d('C', 'Cinta · 15 % / 4,5 km/h × 45 min'),
-      d('G', 'Gym — torso'),
-      d('R', 'Descanso total + TB'),
-      d(
-        'A',
-        'Tirada larga · 17 km',
-        '10 km Z2 + 7 km a ritmo de media maratón. Puedes estrenar la placa de carbono',
-      ),
-    ],
-  },
-  {
-    n: 18,
-    start: '2027-02-01',
-    km: '25 km',
-    phase: 3,
-    race: true,
-    focus: 'Tune-up: aprendes a competir',
-    note: 'Practica aquí la rutina completa: desayuno, calentamiento, gel, ritmo.',
-    days: [
-      d('G', 'Gym — pierna ligera'),
-      d('R', 'Descanso o bici 30 min muy suave'),
-      d('A', 'Tirada larga · 12 km', 'Rodaje suave Z2 (la tirada se mueve a mitad de semana)'),
-      d('R', 'Descanso + TB'),
-      d('G', 'Gym — torso ligero'),
-      d('R', 'Descanso total', 'Prepara la logística de la carrera'),
-      d('Z', 'TUNE-UP — 10K a ritmo de competición', 'Carrera real o simulacro en cinta'),
-    ],
-  },
-  {
-    n: 19,
-    start: '2027-02-08',
-    km: '34 km',
-    phase: 4,
-    focus: 'PICO 1 — máxima carga del plan',
-    note: 'Calcula el ACWR y cuida el sueño. Máxima carga del plan.',
-    warn: true,
-    days: [
-      d('G', 'Gym — pierna pesada'),
-      d('C', 'Bici Z2 · 60 min'),
-      d('B', 'Calidad · 16 km', '4 km fácil + 4×2000 m a ritmo de media maratón (rec 90 s) + 2 km fácil'),
-      d('C', 'Cinta · 15 % / 4,5 km/h × 45 min'),
-      d('G', 'Gym — torso'),
-      d('R', 'Descanso total + TB'),
-      d('A', 'Tirada larga · 18 km', '10 km Z2 + 8 km a ritmo de media maratón — tu tirada más larga'),
-    ],
-  },
-  {
-    n: 20,
-    start: '2027-02-15',
-    km: '29 km',
-    phase: 4,
-    focus: 'PICO 2 — última semana de carga real',
-    note: 'Sin cinta inclinada a partir de esta semana. La prevención pasa a ser gestión de frescura.',
-    days: [
-      d('G', 'Gym — pierna ligera'),
-      d('C', 'Bici Z2 · 50 min', 'Sin cinta inclinada a partir de esta semana'),
-      d('B', 'Calidad · 13 km', '4 km fácil + 3×3000 m a ritmo de media maratón (rec 2 min) + 2 km fácil'),
-      d('R', 'Descanso o bici suave'),
-      d('G', 'Gym — torso ligero'),
-      d('R', 'Descanso total + TB'),
-      d('A', 'Tirada larga · 16 km', '6 km Z2 + 10 km a ritmo de media maratón (simulacro de media)'),
-    ],
-  },
-  {
-    n: 21,
-    start: '2027-02-22',
-    km: '22 km',
-    phase: 5,
-    focus: 'TAPER 1 (−35 %)',
-    note: 'No estrenes nada: ni zapatillas, ni geles, ni rutinas nuevas.',
-    warn: true,
-    days: [
-      d('G', 'Gym — pierna ligera'),
-      d('C', 'Bici Z2 · 40 min'),
-      d('B', 'Calidad · 10 km', '4 km fácil + 5×1000 m a ritmo de media maratón (rec 90 s) + 1 km fácil'),
-      d('R', 'Descanso + TB'),
-      d('G', 'Gym — torso ligero'),
-      d('R', 'Descanso total'),
-      d('A', 'Tirada larga · 12 km', '6 km Z2 + 4 km a ritmo de media maratón + 2 km fácil'),
-    ],
-  },
-  {
-    n: 22,
-    start: '2027-03-01',
-    km: '15 km',
-    phase: 5,
-    focus: 'TAPER 2 (−55 %)',
-    days: [
-      d('R', 'Descanso o gimnasio muy ligero'),
-      d('C', 'Bici Z2 · 30 min suave', '(opcional)'),
-      d('B', 'Calidad · 6 km', '3 km fácil + 4×400 m a ritmo de media maratón (rec 60 s) + 1 km fácil'),
-      d('R', 'Descanso + TB'),
-      d('R', 'Descanso total'),
-      d('R', 'Descanso total', 'Logística de carrera: dorsal, ropa, geles, plan de viaje'),
-      d('A', 'Tirada larga · 9 km', '5 km Z2 + 4 km a ritmo de media maratón'),
-    ],
-  },
-  {
-    n: 23,
-    start: '2027-03-08',
-    km: 'carrera',
-    phase: 6,
-    focus: 'Semana de carrera',
-    note: 'Ritmo objetivo: km 1-3 a 5:25 · km 3-10 a 5:15 · km 10-21,1 a 5:10. Geles: min 30-35, min 65-70 y (opcional) min 95-100.',
-    days: [
-      d('R', 'Descanso total'),
-      d('A', '7 km — activación', '5 km Z2 + 4×100 m de progresiones'),
-      d('R', 'Descanso o bici 25 min muy suave', 'Empieza la carga de hidratos (7-8 g/kg/día ≈ 550-620 g/día)'),
-      d('B', '6 km — última sesión seria', '4 km Z2 + 2 km a ritmo de media maratón'),
-      d('R', 'Descanso total', 'Carga de hidratos al máximo'),
-      d('A', 'Activación · 4 km', '4 km muy suaves + 3×100 m a ritmo de media maratón. Prepara todo y duerme bien'),
-      d('Z', 'MEDIA MARATÓN — objetivo 1:50:00'),
-    ],
-  },
-];
-
-/* -------------------------------------------------------------------------- */
-/*  Calendario definitivo                                                     */
-/* -------------------------------------------------------------------------- */
-
 const addDaysISO = (iso: string, days: number): string => {
   const date = new Date(`${iso}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -518,24 +104,410 @@ const addDaysISO = (iso: string, days: number): string => {
   return `${y}-${m}-${d}`;
 };
 
+const GYM_PUSH = 'Press banca como básico. Nada de fallo.';
+const GYM_PULL = 'Peso muerto convencional como básico. Sóleo en las superseries.';
+const GYM_LEGS = 'Sentadilla + hip thrust. Sin fallo en tren inferior.';
+const REST_TIBIAL = 'Sóleo, tibial posterior y pelota plantar. Nunca justo antes de correr.';
+
 /**
- * Qué semanas del borrador entran en el calendario real, en orden.
+ * Esqueleto fijo de la semana: tres fuerzas, dos carreras cortas y la tirada.
  *
- * El borrador se escribió con 23 semanas y del 19 oct 2026 al 14 mar 2027 hay
- * 21. Se descartan dos:
- *   · la 4 — descarga prematura, porque la fase 1 solo llega a 12 km;
- *   · la 13 — cierre de fiestas, sin valor propio frente a sus vecinas.
- * Todo lo demás se renumera desde 1 y se re-fecha desde PLAN_START.
+ * Los días de gym no se mueven porque su colocación es lo que protege la
+ * carrera: el peso muerto queda 48 h antes de la sentadilla y la sentadilla
+ * 48 h antes de la tirada. Lo único que cambia semana a semana es el contenido
+ * de las tres carreras.
  */
-const KEEP = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
+interface WeekSpec {
+  km: string;
+  phase: Week['phase'];
+  focus: string;
+  note?: string;
+  warn?: boolean;
+  test?: boolean;
+  race?: boolean;
+  /** Sustituciones puntuales de los días de gym (descargas y semana de carrera). */
+  monday?: Day;
+  wednesday?: Day;
+  friday?: Day;
+  quality: Day;
+  easy: Day;
+  long: Day;
+  saturday?: Day;
+}
 
-const DRAFT_BY_N = new Map(DRAFT_WEEKS.map((week) => [week.n, week]));
-
-export const WEEKS: Week[] = KEEP.map((sourceN, index) => {
-  const source = DRAFT_BY_N.get(sourceN);
-  if (!source) throw new Error(`Falta la semana ${sourceN} en el borrador del plan.`);
-  return { ...source, n: index + 1, start: addDaysISO(PLAN_START, index * 7) };
+const buildWeek = (spec: WeekSpec, index: number): Week => ({
+  n: index + 1,
+  start: addDaysISO(PLAN_START, index * 7),
+  km: spec.km,
+  phase: spec.phase,
+  focus: spec.focus,
+  ...(spec.note ? { note: spec.note } : {}),
+  ...(spec.warn ? { warn: true } : {}),
+  ...(spec.test ? { test: true } : {}),
+  ...(spec.race ? { race: true } : {}),
+  days: [
+    spec.monday ?? d('G', 'Gym · push', GYM_PUSH, 'push'),
+    spec.quality,
+    spec.wednesday ?? d('G', 'Gym · pull', GYM_PULL, 'pull'),
+    spec.easy,
+    spec.friday ?? d('G', 'Gym · legs', GYM_LEGS, 'legs'),
+    spec.saturday ?? d('R', 'Descanso + protocolo tibial', REST_TIBIAL),
+    spec.long,
+  ],
 });
+
+const WEEK_SPECS: WeekSpec[] = [
+  {
+    km: '8 km',
+    phase: 1,
+    focus: 'Empezar y montar el protocolo',
+    note: 'Ningún test esta semana. Nada de series fuertes.',
+    warn: true,
+    quality: d(
+      'B',
+      'Calidad · 3 km',
+      'Trote continuo RPE 3 + 4×20 s de progresiones. Nada de series fuertes.',
+    ),
+    easy: d(
+      'E',
+      'Carrera fácil · 2 km',
+      'Trote muy suave RPE 2-3. Cuenta la cadencia 30 s al minuto 5.',
+    ),
+    long: d('A', 'Tirada larga · 3 km', 'Trote suave con caminata si hace falta. RPE 3.'),
+  },
+  {
+    km: '12 km',
+    phase: 1,
+    focus: 'Igual que S1, un poco más largo',
+    quality: d(
+      'B',
+      'Calidad · 4 km',
+      '3 km de trote RPE 3-4 + 4×30 s de progresiones (RPE 5-6) + 1 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 2,5 km', 'Trote Z2. Cadencia 30 s al minuto 5.'),
+    long: d('A', 'Tirada larga · 5,5 km', 'Rodaje continuo RPE 4, sin caminata.'),
+  },
+  {
+    km: '12 km',
+    phase: 1,
+    focus: 'Primera tirada continua sin caminata',
+    quality: d(
+      'B',
+      'Calidad · 4 km',
+      '2 km fácil + 6×(1 min RPE 5-6 / 1 min fácil) + 1 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 2,5 km', 'Trote flojo Z2 + 3×20 s de progresiones.'),
+    long: d(
+      'A',
+      'Tirada larga · 5,5 km',
+      'Rodaje continuo RPE 4. Palpación tibial antes de salir.',
+    ),
+  },
+  {
+    km: '15 km',
+    phase: 2,
+    focus: 'Construir motor, la carrera crece despacio',
+    quality: d(
+      'B',
+      'Calidad · 5 km',
+      '2 km fácil + 6×(2 min RPE 6 / 1 min fácil) + 1 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 3 km', 'Trote Z2.'),
+    long: d('A', 'Tirada larga · 7 km', 'Rodaje continuo Z2. RPE 4.'),
+  },
+  {
+    km: '17 km',
+    phase: 2,
+    focus: 'Semana de control',
+    note: 'Si aparece cualquier amarillo, en la S6 no subes volumen.',
+    quality: d(
+      'B',
+      'Cuestas en cinta · 5,5 km',
+      '2 km fácil + 6×2 min al 8 % (RPE 6-7) con 2 min de trote + 1 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 3,5 km', 'Trote Z2 + 4×30 s de cadencia alta.'),
+    long: d('A', 'Tirada larga · 8 km', 'Rodaje continuo Z2. RPE 4.'),
+  },
+  {
+    km: '18 km',
+    phase: 2,
+    test: true,
+    focus: 'TEST 5K — se recalibra todo',
+    note: '5K ≤27:30 → en camino de 1:55 · 27:30-29:00 → 2:00 · >29:00 → 2:05.',
+    quality: d(
+      'T',
+      'TEST DE 5K EN CINTA',
+      '15 min de calentamiento progresivo + 5K a tope controlado + 10 min de enfriamiento.',
+    ),
+    easy: d('E', 'Carrera fácil · 3 km', 'Trote muy suave Z2.'),
+    long: d('A', 'Tirada larga · 8 km', 'Rodaje suave Z2.'),
+  },
+  {
+    km: '15 km',
+    phase: 2,
+    focus: 'Descarga',
+    quality: d('B', 'Calidad · 4,5 km', '3 km fácil + 6×(1 min RPE 6 / 1 min fácil).'),
+    easy: d('E', 'Carrera fácil · 3 km', 'Trote Z2.'),
+    long: d('A', 'Tirada larga · 7,5 km', 'Rodaje Z2 suave.'),
+    friday: d(
+      'G',
+      'Gym · legs',
+      'Sentadilla y hip thrust ligeros: 2 series a RPE 6. Nada de fallo.',
+      'legs',
+    ),
+  },
+  {
+    km: '21 km',
+    phase: 2,
+    focus: 'Empieza la especificidad: primeros intervalos de verdad',
+    quality: d(
+      'B',
+      'Calidad · 6,5 km',
+      '2 km fácil + 4×1000 m RPE 6-7 (rec 90 s) + 1,5 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 4 km', 'Trote Z2 + 3×20 s de progresiones.'),
+    long: d('A', 'Tirada larga · 10,5 km', '8 km Z2 + 2,5 km a RPE 5-6.'),
+  },
+  {
+    km: '24 km',
+    phase: 2,
+    focus: 'Volumen alto de fase 2',
+    quality: d(
+      'B',
+      'Calidad · 7 km',
+      '2 km fácil + 3×2000 m RPE 6-7 (rec 2 min) + 1 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 4,5 km', 'Trote Z2. Cadencia objetivo 172-176.'),
+    long: d('A', 'Tirada larga · 12,5 km', '9 km Z2 + 3,5 km a RPE 5-6.'),
+  },
+  {
+    km: '20 km',
+    phase: 2,
+    focus: 'Descarga (Navidad)',
+    note: 'En vacaciones, la rutina tibial es lo último que se sacrifica. Cuidado con el alcohol.',
+    warn: true,
+    quality: d(
+      'B',
+      'Calidad · 6 km',
+      '2 km fácil + 5×(2 min RPE 6 / 90 s fácil) + 1 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 4 km', 'Trote Z2 suave.'),
+    long: d('A', 'Tirada larga · 10 km', 'Rodaje Z2 suave.'),
+    friday: d(
+      'G',
+      'Gym · legs',
+      'Sentadilla y hip thrust ligeros: 2 series a RPE 6. Nada de fallo.',
+      'legs',
+    ),
+  },
+  {
+    km: '25 km',
+    phase: 3,
+    focus: 'Primer bloque a ritmo de media maratón',
+    quality: d(
+      'B',
+      'Calidad · 8 km',
+      '2 km fácil + 4×1500 m a ritmo objetivo 5:35 (rec 2 min) + 1,5 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 5 km', 'Trote Z2 + 4×30 s de cadencia alta.'),
+    long: d('A', 'Tirada larga · 12 km', '8 km Z2 + 4 km a 5:35.'),
+  },
+  {
+    km: '22 km',
+    phase: 3,
+    test: true,
+    focus: 'CHECKPOINT: aquí decidimos',
+    note: '10K ≤54:00 → 1:55 · 54-57 → 1:58-2:00 · >57 → 2:05.',
+    warn: true,
+    quality: d(
+      'T',
+      'TEST DE 10K',
+      '15 min de calentamiento progresivo + 10K a tope controlado + 10 min de enfriamiento.',
+    ),
+    easy: d('E', 'Carrera fácil · 3 km', 'Trote muy suave Z2.'),
+    long: d('A', 'Tirada larga · 7 km', 'Rodaje suave Z2.'),
+  },
+  {
+    km: '30 km',
+    phase: 3,
+    focus: 'Primera semana con bloques largos a ritmo de carrera',
+    note: 'Si aparece amarillo, corta el bloque de ritmo y termina en Z2.',
+    quality: d(
+      'B',
+      'Calidad · 9 km',
+      '3 km fácil + 3×2000 m a 5:35 (rec 2 min) + 1,5 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 6 km', 'Trote Z2.'),
+    long: d('A', 'Tirada larga · 15 km', '9 km Z2 + 6 km a 5:35.'),
+  },
+  {
+    km: '25 km',
+    phase: 3,
+    focus: 'Descarga',
+    quality: d(
+      'B',
+      'Cuestas en cinta · 7 km',
+      '2 km fácil + 6×60 s al 10 % (RPE 7) con 90 s de trote + 1 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 5 km', 'Trote Z2.'),
+    long: d('A', 'Tirada larga · 13 km', 'Rodaje Z2 suave.'),
+    friday: d(
+      'G',
+      'Gym · legs',
+      'Sentadilla y hip thrust ligeros: 2 series a RPE 6. Nada de fallo.',
+      'legs',
+    ),
+  },
+  {
+    km: '33 km',
+    phase: 3,
+    focus: 'PICO DE FASE',
+    note: 'Semana dura: duerme 8 h, sube proteína a 1,8 g/kg y vigila el semáforo al máximo.',
+    warn: true,
+    quality: d(
+      'B',
+      'Calidad · 10 km',
+      '3 km fácil + 3×2500 m a 5:35 (rec 2 min) + 1 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 6 km', 'Trote Z2 + 4×30 s de cadencia alta.'),
+    long: d('A', 'Tirada larga · 17 km', '10 km Z2 + 7 km a 5:35.'),
+  },
+  {
+    km: '22 km',
+    phase: 3,
+    race: true,
+    focus: 'Tune-up: aprendes a competir',
+    note: 'Practica aquí la rutina completa: desayuno, calentamiento, gel y ritmo.',
+    quality: d(
+      'B',
+      'Calidad · 6 km',
+      '3 km fácil + 4×500 m a 5:35 (rec 60 s) + 1 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 4 km', 'Trote Z2 suave.'),
+    saturday: d(
+      'R',
+      'Descanso total',
+      'Prepara la logística de la carrera: dorsal, ropa y geles.',
+    ),
+    long: d(
+      'Z',
+      'TUNE-UP — 10K a ritmo de competición',
+      'Carrera real o simulacro. Calienta 15 min y practica el gel.',
+    ),
+  },
+  {
+    km: '34 km',
+    phase: 4,
+    focus: 'PICO 1 — máxima carga del plan',
+    note: 'Calcula el ACWR y cuida el sueño. Máxima carga del plan.',
+    warn: true,
+    quality: d(
+      'B',
+      'Calidad · 10,5 km',
+      '3 km fácil + 2×4000 m a 5:35 (rec 3 min) + 1,5 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 6,5 km', 'Trote Z2.'),
+    long: d(
+      'A',
+      'Tirada larga · 17 km',
+      '10 km Z2 + 7 km a 5:35 — tu tirada más larga.',
+    ),
+  },
+  {
+    km: '29 km',
+    phase: 4,
+    focus: 'PICO 2 — última semana de carga real',
+    note: 'Sin cinta inclinada a partir de esta semana. La prevención pasa a ser gestión de frescura.',
+    quality: d(
+      'B',
+      'Calidad · 9 km',
+      '3 km fácil + 2×3000 m a 5:35 (rec 2 min) + 1 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 5 km', 'Trote Z2.'),
+    long: d('A', 'Tirada larga · 15 km', '6 km Z2 + 9 km a 5:35 — simulacro de media.'),
+  },
+  {
+    km: '22 km',
+    phase: 5,
+    focus: 'TAPER 1 (−35 %)',
+    note: 'No estrenes nada: ni zapatillas, ni geles, ni rutinas nuevas.',
+    warn: true,
+    quality: d(
+      'B',
+      'Calidad · 7 km',
+      '3 km fácil + 2×1500 m a 5:35 (rec 90 s) + 1 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 4 km', 'Trote Z2 + 3×20 s de progresiones.'),
+    long: d('A', 'Tirada larga · 11 km', '6 km Z2 + 5 km a 5:35.'),
+    friday: d(
+      'G',
+      'Gym · legs',
+      'Sentadilla ligera: 2×5 a RPE 6. Nada de fallo.',
+      'legs',
+    ),
+  },
+  {
+    km: '15 km',
+    phase: 5,
+    focus: 'TAPER 2 (−55 %)',
+    quality: d(
+      'B',
+      'Calidad · 4 km',
+      '2 km fácil + 4×400 m a 5:35 (rec 60 s) + 1 km fácil.',
+    ),
+    easy: d('E', 'Carrera fácil · 3 km', 'Trote Z2 suave.'),
+    long: d('A', 'Tirada larga · 8 km', '5 km Z2 + 3 km a 5:35.'),
+    monday: d(
+      'G',
+      'Gym · push',
+      'Series de aproximación, sin buscar récords. 20-25 min.',
+      'push',
+    ),
+    wednesday: d(
+      'G',
+      'Gym · pull',
+      'Peso muerto ligero: 2×5 a RPE 6. Nada de fallo.',
+      'pull',
+    ),
+    friday: d(
+      'G',
+      'Gym · legs',
+      'Sentadilla ligera: 2×5 a RPE 6. Nada de fallo.',
+      'legs',
+    ),
+  },
+  {
+    km: 'carrera',
+    phase: 6,
+    focus: 'Semana de carrera',
+    note: 'Ritmo objetivo: km 1-3 a 5:50 · km 3-10 a 5:40 · km 10-21,1 a 5:30-5:35. Geles: min 30-35, 65-70 y (opcional) 95-100.',
+    monday: d('R', 'Descanso total'),
+    quality: d('A', '7 km — activación', '5 km Z2 + 4×100 m de progresiones.'),
+    wednesday: d(
+      'R',
+      'Descanso o bici 25 min muy suave',
+      'Empieza la carga de hidratos (7-8 g/kg/día ≈ 550-620 g/día).',
+    ),
+    easy: d('B', '6 km — última sesión seria', '4 km Z2 + 2 km a ritmo objetivo.'),
+    friday: d('R', 'Descanso total', 'Carga de hidratos al máximo.'),
+    saturday: d(
+      'A',
+      'Activación · 4 km',
+      '4 km muy suaves + 3×100 m a ritmo de media. Prepara todo y duerme bien.',
+    ),
+    long: d(
+      'Z',
+      'MEDIA MARATÓN — objetivo 1:55:00',
+      'Sal a 5:50 y baja a 5:30-5:35. Si el día no acompaña, 2:00 también es un gran resultado.',
+    ),
+  },
+];
+
+/* -------------------------------------------------------------------------- */
+/*  Calendario definitivo                                                     */
+/* -------------------------------------------------------------------------- */
+
+export const WEEKS: Week[] = WEEK_SPECS.map(buildWeek);
 
 /* -------------------------------------------------------------------------- */
 /*  Utilidades                                                                */

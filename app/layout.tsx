@@ -24,10 +24,10 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Media Maratón 1:50',
+  title: 'Media Maratón 1:55',
   description:
-    'Plan de 23 semanas para media maratón en 1:50 y prevención de periostitis tibial. Uso privado.',
-  applicationName: 'MM 1:50',
+    'Plan de 21 semanas para media maratón en 1:55-2:00 y prevención de periostitis tibial. Uso privado.',
+  applicationName: 'MM 1:55',
   manifest: '/manifest.webmanifest',
   icons: {
     icon: [{ url: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     // 'default' deja que iOS pinte la barra de estado según el tema del
     // sistema, que es justo lo que sigue nuestra paleta.
     statusBarStyle: 'default',
-    title: 'MM 1:50',
+    title: 'MM 1:55',
   },
   robots: { index: false, follow: false, nocache: true },
   formatDetection: { telephone: false },

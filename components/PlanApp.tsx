@@ -323,7 +323,7 @@ export function PlanApp({
         <div className="hdr-top">
           <div style={{ minWidth: 0 }}>
             <p className="wordmark">
-              MM <em>1:50</em>
+              MM <em>1:55</em>
             </p>
             <p className="hdr-sub">14 MAR 2027 · {displayName}</p>
           </div>
@@ -887,6 +887,8 @@ function placeholderFor(type: SessionType): string {
       return 'Ej. Bici Z2 60 min';
     case 'B':
       return 'Ej. Trote suave 25 min sin series';
+    case 'E':
+      return 'Ej. Trote fácil 30 min';
     case 'G':
       return 'Ej. Pesas — pierna y core';
     default:

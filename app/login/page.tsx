@@ -5,7 +5,7 @@ import { safeNext } from '@/lib/url';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Entrar · Media Maratón 1:50',
+  title: 'Entrar · Media Maratón 1:55',
 };
 
 export default async function LoginPage({
@@ -20,13 +20,13 @@ export default async function LoginPage({
     <div className="screen">
       <div className="screen-inner">
         <p className="eyebrow" style={{ marginBottom: 18 }}>
-          21,097 km · 5:13 /km · 23 semanas
+          21,097 km · 5:27 /km · 21 semanas
         </p>
 
         <h1 className="mark">
           Media maratón
           <br />
-          <em>1:50</em>
+          <em>1:55</em>
         </h1>
 
         <p className="lede">

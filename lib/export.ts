@@ -66,10 +66,10 @@ function shortDate(iso: string): string {
     .replace(/\./g, '');
 }
 
-/** El plan arranca el 5 de octubre de 2026 y la carrera es el 14 de marzo de 2027. */
+/** El plan arranca el 19 de octubre de 2026 y la carrera es el 14 de marzo de 2027. */
 const RACE_DATE = '2027-03-14';
 const RACE_KM = '21,097 km';
-const RACE_PACE = '5:13 /km';
+const RACE_PACE = '5:27 /km';
 
 export function buildTrainingReport(input: ExportInput): string {
   const { name, today, done, overrides, logs } = input;
@@ -111,13 +111,15 @@ export function buildTrainingReport(input: ExportInput): string {
   /* Cabecera                                                          */
   /* ---------------------------------------------------------------- */
 
-  out.push('# Hoja de tiempos — Media Maratón 1:50');
+  out.push('# Hoja de tiempos — Media Maratón 1:55');
   out.push('');
   out.push(`- **Atleta:** ${name}`);
   out.push(`- **Informe generado:** ${longDate(today)}`);
-  out.push(`- **Objetivo:** ${RACE_KM} en 1:50 (${RACE_PACE})`);
+  out.push(`- **Objetivo:** ${RACE_KM} en 1:55-2:00 (${RACE_PACE})`);
   out.push(`- **Carrera:** ${longDate(RACE_DATE)}`);
-  out.push('- **Plan:** 23 semanas · del 5 de octubre de 2026 al 14 de marzo de 2027');
+  out.push(
+    `- **Plan:** ${WEEKS.length} semanas · del ${longDate(WEEKS[0]?.start ?? '')} al ${longDate(RACE_DATE)}`,
+  );
   out.push('');
 
   /* ---------------------------------------------------------------- */
@@ -127,7 +129,7 @@ export function buildTrainingReport(input: ExportInput): string {
   out.push(head('Resumen de adherencia'));
   out.push('');
   out.push(`- Sesiones completadas: **${totalDone} de ${totalPlanned}** (${pct} %)`);
-  out.push(`- Semanas cerradas al 100 %: **${fullWeeks.length} de 23**`);
+  out.push(`- Semanas cerradas al 100 %: **${fullWeeks.length} de ${WEEKS.length}**`);
   if (currentN) {
     const w = WEEKS.find((x) => x.n === currentN);
     if (w) {
@@ -281,7 +283,7 @@ export function buildTrainingReport(input: ExportInput): string {
   out.push('2. ¿Mis registros de dolor y de palpación tibial anticipan algún problema?');
   out.push('3. ¿Hay relación entre cadencia, sueño y los días que he fallado o ido mal?');
   out.push('4. ¿Qué debería ajustar en las próximas dos semanas, y qué señales me obligarían a parar?');
-  out.push('5. ¿Voy en camino de bajar de 1:50, o el objetivo necesita revisarse?');
+  out.push('5. ¿Voy en camino de bajar de 1:55, o el objetivo necesita revisarse?');
   out.push('');
   out.push('Responde en español, con referencias concretas a los datos de este informe.');
   out.push('');
