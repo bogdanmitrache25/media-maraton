@@ -487,7 +487,9 @@ def llm_chat(chat_id: int, text: str) -> str | None:
     system = (
         "Eres un asistente breve de entrenamiento y nutrición. Responde en español, "
         "en 2-4 frases, con tono cercano y sin rodeos. Usa solo este contexto real: "
-        f"{context}. Si no hay datos, dilo. No inventes cifras ni des consejos médicos."
+        f"{context}. Si no hay datos, dilo. No inventes cifras ni des consejos médicos. "
+        "Si el mensaje va de la voz del bot o de elegir una voz, confirma la elección "
+        "y no hables de pesajes ni comidas."
     )
     messages: list[dict[str, str]] = [{"role": "system", "content": system}]
     messages.extend(history.get(chat_id, [])[-6:])
@@ -647,6 +649,21 @@ GREETINGS = {
     "hola bot",
 }
 
+# El usuario puede contestar a las muestras de voz con "la quinta", "la actual",
+# etc. Eso no es una medición ni una comida: se confirma y ya está.
+VOICE_CHOICE_HINTS = (
+    "la quinta",
+    "la ultima",
+    "la última",
+    "la actual",
+    "voz actual",
+    "prefiero la actual",
+    "prefiero el actual",
+    "prefiero al actual",
+    "me quedo con la actual",
+    "davefx",
+)
+
 MEAL_PREFIX = (
     r"(?:(?:hoy|esta mañana|esta tarde|anoche|ayer)\s*[,:-]?\s*)?"
     r"(?:/?(?:comida|he comido|he desayunado|he almorzado|he cenado|he merendado|"
@@ -746,6 +763,11 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
         return
     if normalized in GREETINGS:
         reply(chat_id, "Hola. Cuéntame qué has comido, cómo te has pesado o qué quieres saber.")
+        return
+
+    voice_text = clean.lower()
+    if any(hint in voice_text for hint in VOICE_CHOICE_HINTS):
+        reply(chat_id, "Perfecto, me quedo con la voz actual (davefx). No cambio nada.")
         return
 
     # Comida explícita: "comida ...", "he comido ...", "desayuno ...".
