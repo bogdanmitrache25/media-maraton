@@ -1,7 +1,13 @@
 """Bot privado de Media Maratón.
 
-Recibe texto, notas de voz y fotos por Telegram y escribe en el Supabase
-self-hosted del servidor de casa. Solo atiende al usuario autorizado.
+La idea es hablarle normal, sin comandos. El bot separa dos cosas:
+
+- Datos estructurados (peso, medidas, comidas explícitas): parser determinista.
+- Conversación y comidas escritas de forma libre: Qwen2.5-3B local.
+- Notas de voz: Whisper local -> mismo camino que el texto.
+- Fotos: bucket privado del Supabase self-hosted.
+
+Todo se guarda en el servidor de casa.
 """
 
 from __future__ import annotations
@@ -23,6 +29,10 @@ SERVICE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"].strip()
 SUPABASE_USER_ID = os.environ["SUPABASE_USER_ID"].strip()
 WHISPER_URL = os.environ.get("WHISPER_URL", "http://127.0.0.1:8001").rstrip("/")
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "Systran/faster-whisper-small")
+LLM_URL = os.environ.get("LLM_URL", "http://127.0.0.1:8081").rstrip("/")
+LLM_MODEL = os.environ.get(
+    "LLM_MODEL", "bartowski/Qwen2.5-3B-Instruct-GGUF:Q4_K_M"
+)
 OFFSET_FILE = os.environ.get("OFFSET_FILE", "/data/offset")
 
 TIME_ZONE = ZoneInfo("Europe/Madrid")
@@ -30,7 +40,8 @@ TG_API = f"https://api.telegram.org/bot{TOKEN}"
 TG_FILE = f"https://api.telegram.org/file/bot{TOKEN}"
 
 session = requests.Session()
-session.headers.update({"User-Agent": "media-maraton-bot/1.0"})
+session.headers.update({"User-Agent": "media-maraton-bot/3.0"})
+history: dict[int, list[dict[str, str]]] = {}
 
 
 def log(*args: object) -> None:
@@ -46,7 +57,15 @@ def tg(method: str, **params: object) -> dict:
 
 
 def reply(chat_id: int, text: str) -> None:
-    tg("sendMessage", chat_id=chat_id, text=text, disable_web_page_preview=True)
+    tg("sendMessage", chat_id=chat_id, text=text[:4096], disable_web_page_preview=True)
+
+
+def typing(chat_id: int) -> None:
+    tg("sendChatAction", chat_id=chat_id, action="typing")
+
+
+def now_iso() -> str:
+    return datetime.now(TIME_ZONE).isoformat()
 
 
 def today_iso() -> str:
@@ -83,12 +102,28 @@ def rest_post(
     return {"status": response.status_code, "body": response.text}
 
 
-def save_metric(values: dict[str, float]) -> None:
+def rest_get(table: str, params: dict) -> list:
+    response = session.get(
+        f"{SUPABASE_URL}/rest/v1/{table}",
+        params=params,
+        headers=sb_headers(),
+        timeout=20,
+    )
+    if response.status_code >= 300:
+        return []
+    try:
+        data = response.json()
+        return data if isinstance(data, list) else []
+    except ValueError:
+        return []
+
+
+def save_metric(values: dict[str, float], measured_on: str | None = None) -> None:
     if "bmr_kcal" in values:
         values["bmr_kcal"] = int(round(values["bmr_kcal"]))
     payload = {
         "user_id": SUPABASE_USER_ID,
-        "measured_on": today_iso(),
+        "measured_on": measured_on or today_iso(),
         **values,
     }
     rest_post(
@@ -99,13 +134,28 @@ def save_metric(values: dict[str, float]) -> None:
     )
 
 
-def save_meal(description: str) -> None:
-    payload = {
+def save_meal(
+    description: str,
+    calories: int | None = None,
+    protein_g: float | None = None,
+    carbs_g: float | None = None,
+    fat_g: float | None = None,
+    eaten_at: str | None = None,
+) -> None:
+    payload: dict[str, object] = {
         "user_id": SUPABASE_USER_ID,
-        "eaten_at": datetime.now(TIME_ZONE).isoformat(),
+        "eaten_at": eaten_at or now_iso(),
         "description": description[:500],
         "source": "telegram",
     }
+    if calories is not None:
+        payload["calories"] = int(round(calories))
+    if protein_g is not None:
+        payload["protein_g"] = float(protein_g)
+    if carbs_g is not None:
+        payload["carbs_g"] = float(carbs_g)
+    if fat_g is not None:
+        payload["fat_g"] = float(fat_g)
     rest_post("meals", payload)
 
 
@@ -165,40 +215,291 @@ def transcribe(file_id: str) -> str:
     return (response.json().get("text") or "").strip()
 
 
-NUMBER = r"([0-9]+(?:[.,][0-9]+)?)"
-METRICS: dict[str, str] = {
-    "peso": "weight_kg",
-    "grasa": "body_fat_pct",
-    "musculo": "muscle_mass_kg",
-    "músculo": "muscle_mass_kg",
-    "agua": "water_pct",
-    "visceral": "visceral_fat",
-    "hueso": "bone_mass_kg",
-    "metabolismo": "bmr_kcal",
-    "cintura": "waist_cm",
-    "cadera": "hip_cm",
-    "pecho": "chest_cm",
-    "muslo": "thigh_cm",
-    "brazo": "arm_cm",
-    "gemelo": "calf_cm",
+def progress_context() -> str:
+    """Resumen compacto para que el LLM responda preguntas de progreso."""
+    try:
+        metrics = rest_get(
+            "body_metrics",
+            {
+                "select": "measured_on,weight_kg,body_fat_pct,waist_cm",
+                "order": "measured_on.desc",
+                "limit": "1",
+            },
+        )
+        meals = rest_get(
+            "meals",
+            {
+                "select": "description,calories,eaten_at",
+                "order": "eaten_at.desc",
+                "limit": "20",
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        log("context error", type(exc).__name__, exc)
+        return ""
+
+    parts: list[str] = []
+    if metrics:
+        m = metrics[0]
+        bits = []
+        if m.get("weight_kg") is not None:
+            bits.append(f"peso {m['weight_kg']} kg")
+        if m.get("body_fat_pct") is not None:
+            bits.append(f"grasa {m['body_fat_pct']} %")
+        if m.get("waist_cm") is not None:
+            bits.append(f"cintura {m['waist_cm']} cm")
+        if bits:
+            parts.append(f"Último pesaje ({m.get('measured_on')}): " + ", ".join(bits))
+    else:
+        parts.append("Sin pesajes todavía")
+
+    today = today_iso()
+    todays = [m for m in meals if str(m.get("eaten_at", ""))[:10] == today]
+    if todays:
+        kcal = sum(int(m.get("calories") or 0) for m in todays)
+        parts.append(f"Comidas de hoy: {len(todays)} ({kcal} kcal registradas)")
+    else:
+        parts.append("Comidas de hoy: ninguna registrada")
+
+    return " · ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Parser determinista de métricas
+# ---------------------------------------------------------------------------
+
+METRIC_LABELS = {
+    "weight_kg": ("peso", "kg", 1),
+    "body_fat_pct": ("grasa", "%", 1),
+    "muscle_mass_kg": ("músculo", "kg", 1),
+    "water_pct": ("agua", "%", 1),
+    "visceral_fat": ("visceral", "", 1),
+    "bone_mass_kg": ("masa ósea", "kg", 1),
+    "bmr_kcal": ("metabolismo", "kcal", 0),
+    "waist_cm": ("cintura", "cm", 1),
+    "hip_cm": ("cadera", "cm", 1),
+    "chest_cm": ("pecho", "cm", 1),
+    "thigh_cm": ("muslo", "cm", 1),
+    "arm_cm": ("brazo", "cm", 1),
+    "calf_cm": ("gemelo", "cm", 1),
 }
 
-HELP = """Soy tu bot privado de Media Maratón.
+METRIC_ALIASES: dict[str, list[str]] = {
+    "weight_kg": ["peso", "pesado", "pesé", "pese"],
+    "body_fat_pct": ["grasa corporal", "grasa"],
+    "muscle_mass_kg": ["masa muscular", "músculo", "musculo"],
+    "water_pct": ["agua"],
+    "visceral_fat": ["grasa visceral", "visceral"],
+    "bone_mass_kg": ["masa ósea", "masa osea", "hueso"],
+    "bmr_kcal": ["metabolismo basal", "metabolismo", "bmr"],
+    "waist_cm": ["cintura"],
+    "hip_cm": ["cadera"],
+    "chest_cm": ["pecho"],
+    "thigh_cm": ["muslo"],
+    "arm_cm": ["brazo"],
+    "calf_cm": ["gemelo"],
+}
 
-Puedes escribirme:
-• peso 82,5
-• grasa 18,4
-• medidas cintura=88 cadera=95 pecho=100
-• comida pollo con arroz y ensalada
-• Una nota de voz con cualquiera de esas cosas.
-• Una foto con el pie de foto: frente, lado o espalda.
+METRIC_RANGES = {
+    "weight_kg": (30, 250),
+    "body_fat_pct": (3, 60),
+    "muscle_mass_kg": (10, 120),
+    "water_pct": (20, 75),
+    "visceral_fat": (1, 30),
+    "bone_mass_kg": (1, 10),
+    "bmr_kcal": (800, 5000),
+    "waist_cm": (30, 200),
+    "hip_cm": (30, 200),
+    "chest_cm": (30, 200),
+    "thigh_cm": (20, 120),
+    "arm_cm": (15, 80),
+    "calf_cm": (20, 80),
+}
 
-Los datos van a tu Supabase del servidor de casa. Solo tú puedes usarme."""
+NUMBER = r"([0-9]+(?:[.,][0-9]+)?)"
 
 
 def parse_number(raw: str) -> float:
     return float(raw.replace(",", "."))
 
+
+def format_metric(values: dict[str, float]) -> str:
+    bits: list[str] = []
+    for key, val in values.items():
+        label = METRIC_LABELS.get(key)
+        if not label:
+            continue
+        name, unit, digits = label
+        text = f"{val:.{digits}f}".replace(".", ",")
+        bits.append(f"{name} {text}{(' ' + unit) if unit else ''}")
+    return " · ".join(bits)
+
+
+def parse_metrics(text: str) -> dict[str, float]:
+    low = " ".join(text.lower().split())
+    values: dict[str, float] = {}
+
+    # Formato "medidas cintura=88 cadera=95".
+    if "medidas" in low:
+        for name, raw in re.findall(r"([a-záéíóúñ]+)\s*[=:]\s*" + NUMBER, low):
+            for column, aliases in METRIC_ALIASES.items():
+                if name in aliases:
+                    values[column] = parse_number(raw)
+                    break
+
+    for column, aliases in METRIC_ALIASES.items():
+        if column in values:
+            continue
+        for alias in sorted(aliases, key=len, reverse=True):
+            if column == "body_fat_pct" and alias == "grasa":
+                pattern = rf"\bgrasa\b(?!\s+visceral)[^0-9]{{0,20}}{NUMBER}"
+            else:
+                pattern = rf"\b{re.escape(alias)}\b[^0-9]{{0,20}}{NUMBER}"
+            match = re.search(pattern, low)
+            if not match:
+                continue
+            value = parse_number(match.group(1))
+            low_bound, high_bound = METRIC_RANGES[column]
+            if low_bound <= value <= high_bound:
+                values[column] = value
+                break
+
+    # "estoy en 82,5 kg" sin la palabra peso.
+    if "weight_kg" not in values:
+        match = re.search(rf"\b{NUMBER}\s*kg\b", low)
+        if match:
+            value = parse_number(match.group(1))
+            if 30 <= value <= 250:
+                values["weight_kg"] = value
+
+    return values
+
+
+# ---------------------------------------------------------------------------
+# LLM local: conversación y extracción de comidas libres
+# ---------------------------------------------------------------------------
+
+def llm_chat(chat_id: int, text: str) -> str | None:
+    context = progress_context() or "sin datos todavía"
+    system = (
+        "Eres un asistente breve de entrenamiento y nutrición. Responde en español, "
+        "en 2-4 frases, con tono cercano y sin rodeos. Usa solo este contexto real: "
+        f"{context}. Si no hay datos, dilo. No inventes cifras ni des consejos médicos."
+    )
+    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+    messages.extend(history.get(chat_id, [])[-6:])
+    messages.append({"role": "user", "content": text})
+
+    try:
+        response = session.post(
+            f"{LLM_URL}/v1/chat/completions",
+            json={
+                "model": LLM_MODEL,
+                "messages": messages,
+                "temperature": 0.2,
+                "max_tokens": 220,
+            },
+            timeout=180,
+        )
+        if response.status_code >= 300:
+            log("llm chat status", response.status_code, response.text[:200])
+            return None
+        content = response.json()["choices"][0]["message"]["content"] or ""
+        return content.strip() or None
+    except Exception as exc:  # noqa: BLE001
+        log("llm chat error", type(exc).__name__, exc)
+        return None
+
+
+MEAL_SYSTEM = """Devuelve SOLO un JSON válido, sin markdown ni texto fuera del JSON.
+Si el mensaje describe comida o bebida, devuelve:
+{"type":"meal","description":"solo los alimentos, sin 'he desayunado', 'hoy' ni la hora","calories":null,"protein_g":null,"carbs_g":null,"fat_g":null}
+Si no describe comida, devuelve:
+{"type":"none"}
+No inventes calorías ni macros: usa null si el usuario no los dice."""
+
+
+def clean_meal_description(description: str) -> str:
+    text = " ".join(description.strip(" .:-").split())
+    text = re.sub(
+        r"^(hoy|esta mañana|esta tarde|anoche|ayer)\s*[,:-]?\s*",
+        "",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(
+        r"^(he\s+)?(desayunado|comido|almorzado|cenado|merendado)\s*[,:-]?\s*",
+        "",
+        text,
+        flags=re.I,
+    )
+    return text.strip(" .:-")
+
+
+def llm_meal(text: str) -> dict | None:
+    try:
+        response = session.post(
+            f"{LLM_URL}/v1/chat/completions",
+            json={
+                "model": LLM_MODEL,
+                "messages": [
+                    {"role": "system", "content": MEAL_SYSTEM},
+                    {"role": "user", "content": text},
+                ],
+                "temperature": 0,
+                "max_tokens": 160,
+            },
+            timeout=180,
+        )
+        if response.status_code >= 300:
+            log("llm meal status", response.status_code, response.text[:200])
+            return None
+        content = response.json()["choices"][0]["message"]["content"] or ""
+    except Exception as exc:  # noqa: BLE001
+        log("llm meal error", type(exc).__name__, exc)
+        return None
+
+    content = content.strip()
+    content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.I)
+    content = re.sub(r"\s*```$", "", content)
+    start = content.find("{")
+    end = content.rfind("}")
+    if start < 0 or end <= start:
+        log("llm meal non-json", content[:200])
+        return None
+    try:
+        data = json.loads(content[start : end + 1])
+    except ValueError as exc:
+        log("llm meal json error", exc, content[:200])
+        return None
+    if str(data.get("type", "")).lower() != "meal":
+        return None
+
+    description = clean_meal_description(str(data.get("description", "")))
+    if not description:
+        return None
+
+    def num(key: str) -> float | None:
+        value = data.get(key)
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            return float(str(value).replace(",", "."))
+        except ValueError:
+            return None
+
+    return {
+        "description": description,
+        "calories": num("calories"),
+        "protein_g": num("protein_g"),
+        "carbs_g": num("carbs_g"),
+        "fat_g": num("fat_g"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Enrutado del texto
+# ---------------------------------------------------------------------------
 
 GREETINGS = {
     "hola",
@@ -214,80 +515,207 @@ GREETINGS = {
 }
 
 MEAL_PREFIX = (
-    r"(?:/?(?:comida|he comido|desayuno|desayuné|desayune|almuerzo|almorcé|almorce|"
-    r"cena|cené|cene|merienda|merendé|merende|snack|comí|comi))"
+    r"(?:(?:hoy|esta mañana|esta tarde|anoche|ayer)\s*[,:-]?\s*)?"
+    r"(?:/?(?:comida|he comido|he desayunado|he almorzado|he cenado|he merendado|"
+    r"he tomado|desayuno|desayuné|desayune|almuerzo|almorcé|almorce|cena|cené|cene|"
+    r"merienda|merendé|merende|snack|comí|comi|tomé|tome))"
+)
+
+HELP = """Soy tu bot privado de Media Maratón. No necesitas comandos.
+
+Háblame normal:
+• «me he pesado en 82,5»
+• «cintura 88, cadera 95 y pecho 100»
+• «hoy he desayunado café con leche y dos tostadas»
+• «¿cómo voy?»
+• Una nota de voz con cualquiera de esas cosas.
+• Una foto con el pie de foto: frente, lado o espalda.
+
+Todo va a tu Supabase del servidor de casa. Solo tú puedes usarme."""
+
+QUESTION_STARTS = (
+    "que ",
+    "qué ",
+    "como ",
+    "cómo ",
+    "cuanto ",
+    "cuánto ",
+    "cuanta ",
+    "cuándo ",
+    "cuando ",
+    "donde ",
+    "dónde ",
+    "por que",
+    "por qué",
+    "puedes ",
+    "podrías ",
+    "me recomiendas",
+    "dime ",
+    "qué tal",
+    "que tal",
 )
 
 
-def handle_text(chat_id: int, text: str, source: str = "text") -> None:
-    clean = " ".join(text.strip().split())
-    low = clean.lower()
+def is_question(text: str) -> bool:
+    low = text.lower().strip()
+    return low.endswith("?") or any(low.startswith(prefix) for prefix in QUESTION_STARTS)
 
+
+def handle_text_fallback(chat_id: int, text: str, source: str = "text") -> None:
+    clean = " ".join(text.strip().split())
     if not clean:
         reply(chat_id, "No he entendido nada. Prueba con /ayuda.")
         return
 
-    normalized = low.strip(" !¡?¿.")
-
+    normalized = clean.lower().strip(" !¡?¿.")
     if normalized in {"/start", "start", "/ayuda", "ayuda", "help", "/help"}:
         reply(chat_id, HELP)
         return
-
     if normalized in GREETINGS:
+        reply(chat_id, HELP)
+        return
+
+    meal_match = re.match(MEAL_PREFIX + r"\s*[:\-]?\s*(.*)$", clean, re.I)
+    if meal_match:
+        description = clean_meal_description(meal_match.group(1))
+        if description:
+            try:
+                save_meal(description)
+                reply(chat_id, f"Comida registrada: «{description[:300]}».")
+            except Exception as exc:  # noqa: BLE001
+                log("fallback meal", type(exc).__name__, exc)
+                reply(chat_id, "No he podido guardar la comida.")
+            return
+
+    values = parse_metrics(clean)
+    if values:
+        try:
+            save_metric(values)
+            reply(chat_id, "Guardado: " + format_metric(values) + ".")
+        except Exception as exc:  # noqa: BLE001
+            log("fallback metric", type(exc).__name__, exc)
+            reply(chat_id, "No he podido guardar la medición.")
+        return
+
+    prefix = "Transcripción: «%s».\n" % clean if source == "voice" else ""
+    reply(chat_id, prefix + "No he guardado nada. Dime qué quieres registrar o pregúntame.")
+
+
+def handle_text(chat_id: int, text: str, source: str = "text") -> None:
+    clean = " ".join(text.strip().split())
+    if not clean:
+        reply(chat_id, "No he entendido nada. Prueba con /ayuda.")
+        return
+
+    normalized = clean.lower().strip(" !¡?¿.")
+    if normalized in {"/start", "start", "/ayuda", "ayuda", "help", "/help"}:
+        reply(chat_id, HELP)
+        return
+    if normalized in GREETINGS:
+        reply(chat_id, "Hola. Cuéntame qué has comido, cómo te has pesado o qué quieres saber.")
+        return
+
+    # Comida explícita: "comida ...", "he comido ...", "desayuno ...".
+    meal_match = re.match(MEAL_PREFIX + r"\s*[:\-]?\s*(.*)$", clean, re.I)
+    if meal_match:
+        description = clean_meal_description(meal_match.group(1))
+        if not description:
+            reply(chat_id, "¿Qué has comido? Dímelo detrás: comida pollo con arroz.")
+            return
+        try:
+            save_meal(description)
+            reply(chat_id, f"Comida registrada: «{description[:300]}».")
+        except Exception as exc:  # noqa: BLE001
+            log("meal save error", type(exc).__name__, exc)
+            reply(chat_id, "No he podido guardar la comida.")
+        return
+
+    # Métricas: peso, medidas, etc. Esto es determinista y no depende del LLM.
+    values = parse_metrics(clean)
+    if values:
+        try:
+            save_metric(values)
+            reply(chat_id, "Guardado: " + format_metric(values) + ".")
+        except Exception as exc:  # noqa: BLE001
+            log("metric save error", type(exc).__name__, exc)
+            reply(chat_id, "No he podido guardar la medición.")
+        return
+
+    # Preguntas de progreso: respuesta determinista con los datos reales.
+    low = clean.lower()
+    progress_phrases = (
+        "como voy",
+        "cómo voy",
+        "como estoy",
+        "cómo estoy",
+        "mi progreso",
+        "mi evolucion",
+        "mi evolución",
+        "que tal voy",
+        "qué tal voy",
+        "como va",
+        "cómo va",
+    )
+    if any(phrase in low for phrase in progress_phrases):
+        context = progress_context()
         reply(
             chat_id,
-            "Hola. Estoy listo. Para registrar:\n"
-            "• peso 82,5\n"
-            "• comida pollo con arroz\n"
-            "• medidas cintura=88 cadera=95\n"
-            "• /ayuda",
+            ("Esto es lo que tengo: " + context + ".") if context else "Todavía no tengo datos.",
         )
         return
 
-    # Medidas en bloque: "medidas cintura=88 cadera=95 ..."
-    if low.startswith(("medidas", "/medidas")):
-        pairs = re.findall(r"([a-záéíóúñ]+)\s*[=:]\s*" + NUMBER, low)
-        values: dict[str, float] = {}
-        labels: list[str] = []
-        for name, raw in pairs:
-            column = METRICS.get(name)
-            if column:
-                values[column] = parse_number(raw)
-                labels.append(f"{name} {raw.replace('.', ',')}")
-        if not values:
-            reply(chat_id, "No he encontrado medidas. Ejemplo: medidas cintura=88 cadera=95")
+    typing(chat_id)
+
+    # Preguntas y conversación: respuesta natural con contexto real.
+    if is_question(clean):
+        answer = llm_chat(chat_id, clean)
+        if answer:
+            reply(chat_id, answer)
+            history.setdefault(chat_id, []).append({"role": "user", "content": clean})
+            history[chat_id].append({"role": "assistant", "content": answer})
+            history[chat_id] = history[chat_id][-8:]
             return
-        save_metric(values)
-        reply(chat_id, "Medidas guardadas: " + " · ".join(labels))
+        handle_text_fallback(chat_id, clean, source)
         return
 
-    # Comida explícita: "comida ...", "he comido ...", "desayuno ...", etc.
-    meal_match = re.match(MEAL_PREFIX + r"\s*[:\-]?\s*(.*)$", clean, re.I)
-    if meal_match:
-        description = meal_match.group(1).strip(" .:-")
-        if not description:
-            reply(chat_id, "¿Qué has comido? Escríbelo detrás: comida pollo con arroz.")
+    # Texto libre: ¿es una comida? El LLM solo extrae; la escritura la hacemos aquí.
+    meal = llm_meal(clean)
+    if meal:
+        try:
+            save_meal(
+                meal["description"],
+                int(round(meal["calories"])) if meal["calories"] is not None else None,
+                meal["protein_g"],
+                meal["carbs_g"],
+                meal["fat_g"],
+            )
+            extra = (
+                f" ({int(round(meal['calories']))} kcal)"
+                if meal["calories"] is not None
+                else ""
+            )
+            reply(chat_id, f"Comida registrada: «{meal['description'][:300]}»{extra}.")
+            history.setdefault(chat_id, []).append({"role": "user", "content": clean})
+            history[chat_id].append(
+                {"role": "assistant", "content": f"Comida registrada: {meal['description']}"}
+            )
+            history[chat_id] = history[chat_id][-8:]
             return
-        save_meal(description)
-        reply(chat_id, f"Comida registrada: «{description[:300]}».")
+        except Exception as exc:  # noqa: BLE001
+            log("free meal save error", type(exc).__name__, exc)
+            reply(chat_id, "No he podido guardar la comida.")
+            return
+
+    # No es comida: respuesta conversacional.
+    answer = llm_chat(chat_id, clean)
+    if answer:
+        reply(chat_id, answer)
+        history.setdefault(chat_id, []).append({"role": "user", "content": clean})
+        history[chat_id].append({"role": "assistant", "content": answer})
+        history[chat_id] = history[chat_id][-8:]
         return
 
-    # Métrica simple: "peso 82,5", "/grasa 18", etc.
-    for name, column in METRICS.items():
-        match = re.search(rf"\b{re.escape(name)}\b[^0-9]{{0,6}}{NUMBER}", low)
-        if match:
-            value = parse_number(match.group(1))
-            save_metric({column: value})
-            reply(chat_id, f"Guardado: {name} {match.group(1).replace('.', ',')} (hoy).")
-            return
-
-    # Si no es nada claro, no inventamos: pedimos la intención explícita.
-    prefix = "Transcripción: «%s».\n" % clean if source == "voice" else ""
-    reply(
-        chat_id,
-        prefix + "No he guardado nada. Para comida: «comida pollo con arroz». "
-        "Para medidas: «peso 82,5». /ayuda",
-    )
+    handle_text_fallback(chat_id, clean, source)
 
 
 def photo_view(caption: str) -> tuple[str, str | None]:
@@ -359,7 +787,10 @@ def main() -> None:
     offset = read_offset()
     while True:
         try:
-            params: dict[str, object] = {"timeout": 30, "allowed_updates": json.dumps(["message", "edited_message"])}
+            params: dict[str, object] = {
+                "timeout": 30,
+                "allowed_updates": json.dumps(["message", "edited_message"]),
+            }
             if offset is not None:
                 params["offset"] = offset
             response = session.get(f"{TG_API}/getUpdates", params=params, timeout=45)
