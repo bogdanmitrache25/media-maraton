@@ -33,3 +33,9 @@ pnpm-debug.log*
 !.vscode/extensions.json
 .idea/
 .env*
+
+# bot de Telegram: claves y datos locales
+bot/ssh/
+bot/data/
+__pycache__/
+*.pyc

@@ -12,9 +12,12 @@ Todo se guarda en el servidor de casa.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
+import shlex
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -38,6 +41,16 @@ TTS_MODEL = os.environ.get("TTS_MODEL", "piper")
 TTS_VOICE = os.environ.get("TTS_VOICE", "es_ES-davefx-medium")
 TTS_MAX_CHARS = int(os.environ.get("TTS_MAX_CHARS", "2500"))
 OFFSET_FILE = os.environ.get("OFFSET_FILE", "/data/offset")
+SSH_KEY = os.environ.get("SSH_KEY", "/ssh/id_ed25519")
+SSH_TARGET = os.environ.get("SSH_TARGET", "bogdanfreshh@127.0.0.1")
+SSH_TIMEOUT = int(os.environ.get("SSH_TIMEOUT", "60"))
+AGENT_ENABLED = os.environ.get("AGENT_ENABLED", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
+AGENT_MAX_STEPS = int(os.environ.get("AGENT_MAX_STEPS", "3"))
 MESSAGE_LOG = os.environ.get("MESSAGE_LOG", "/data/messages.jsonl")
 LLM_REPLIES = os.environ.get("LLM_REPLIES", "1").strip().lower() not in {
     "0",
@@ -65,6 +78,7 @@ TG_FILE = f"https://api.telegram.org/file/bot{TOKEN}"
 session = requests.Session()
 session.headers.update({"User-Agent": "media-maraton-bot/3.0"})
 history: dict[int, list[dict[str, str]]] = {}
+pending_actions: dict[int, dict] = {}
 
 
 def log(*args: object) -> None:
@@ -132,6 +146,21 @@ def send_audio(chat_id: int, audio: bytes) -> None:
         log("sendAudio error", type(exc).__name__, exc)
 
 
+SECRET_RE = [
+    re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
+    re.compile(r"\b\d{8,10}:[A-Za-z0-9_-]{30,}\b"),
+    re.compile(r"\b(?:sk|pk|re|ghp|xoxb)[-_][A-Za-z0-9_-]{10,}\b"),
+    re.compile(r"\b[0-9a-fA-F]{32,}\b"),
+]
+
+
+def redact(text: str) -> str:
+    value = text
+    for pattern in SECRET_RE:
+        value = pattern.sub("[redactado]", value)
+    return value
+
+
 def log_message(chat_id: int, direction: str, text: str) -> None:
     try:
         os.makedirs(os.path.dirname(MESSAGE_LOG), exist_ok=True)
@@ -142,7 +171,7 @@ def log_message(chat_id: int, direction: str, text: str) -> None:
                         "ts": now_iso(),
                         "chat_id": chat_id,
                         "direction": direction,
-                        "text": text[:4000],
+                        "text": redact(text[:4000]),
                     },
                     ensure_ascii=False,
                 )
@@ -158,10 +187,11 @@ def append_history(chat_id: int, role: str, text: str) -> None:
 
 
 def reply(chat_id: int, text: str) -> None:
-    tg("sendMessage", chat_id=chat_id, text=text[:4096], disable_web_page_preview=True)
-    log_message(chat_id, "out", text)
-    append_history(chat_id, "assistant", text)
-    audio = tts_audio(text)
+    safe = redact(text)[:4096]
+    tg("sendMessage", chat_id=chat_id, text=safe, disable_web_page_preview=True)
+    log_message(chat_id, "out", safe)
+    append_history(chat_id, "assistant", safe)
+    audio = tts_audio(safe)
     if audio:
         send_audio(chat_id, audio)
 
@@ -441,6 +471,685 @@ def progress_context() -> str:
         parts.append(f"Último entreno: {t.get('kind')} ({t.get('session_date')})")
 
     return " · ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Herramientas del agente (app + servidor)
+# ---------------------------------------------------------------------------
+
+AGENT_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "save_body_metric",
+            "description": "Guarda peso, grasa, músculo, agua, visceral, metabolismo, masa ósea o medidas de cinta. Usa solo los campos que el usuario mencione.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "date": {"type": "string", "description": "Fecha YYYY-MM-DD; si no se dice, hoy."},
+                    "weight_kg": {"type": "number"},
+                    "body_fat_pct": {"type": "number"},
+                    "muscle_mass_kg": {"type": "number"},
+                    "water_pct": {"type": "number"},
+                    "visceral_fat": {"type": "number"},
+                    "bone_mass_kg": {"type": "number"},
+                    "bmr_kcal": {"type": "number"},
+                    "waist_cm": {"type": "number"},
+                    "hip_cm": {"type": "number"},
+                    "chest_cm": {"type": "number"},
+                    "thigh_cm": {"type": "number"},
+                    "arm_cm": {"type": "number"},
+                    "calf_cm": {"type": "number"},
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "save_meal",
+            "description": "Registra una comida o bebida. No inventes calorías ni macros.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "description": {"type": "string"},
+                    "calories": {"type": "number"},
+                    "protein_g": {"type": "number"},
+                    "carbs_g": {"type": "number"},
+                    "fat_g": {"type": "number"},
+                    "eaten_at": {"type": "string"},
+                },
+                "required": ["description"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "save_steps",
+            "description": "Registra los pasos del día.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "steps": {"type": "integer"},
+                    "date": {"type": "string"},
+                },
+                "required": ["steps"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "save_training",
+            "description": "Registra una sesión de entrenamiento ya hecha.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["push", "pull", "legs", "run", "other"]},
+                    "notes": {"type": "string"},
+                    "duration_min": {"type": "number"},
+                    "rpe": {"type": "number"},
+                    "date": {"type": "string"},
+                },
+                "required": ["kind", "notes"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_progress",
+            "description": "Consulta el último pesaje, comidas de hoy, pasos y último entreno.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "server_status",
+            "description": "Consulta memoria, disco, uptime y contenedores del servidor.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "server_logs",
+            "description": "Lee los últimos logs de un contenedor o servicio.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target": {"type": "string"},
+                    "lines": {"type": "integer"},
+                    "kind": {"type": "string", "enum": ["docker", "systemd"]},
+                },
+                "required": ["target"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_dir",
+            "description": "Lista un directorio del servidor.",
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_file",
+            "description": "Lee un archivo de texto del servidor.",
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_shell",
+            "description": "Ejecuta un comando en el servidor. Los comandos peligrosos se quedan pendientes de confirmación.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["command"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_file",
+            "description": "Escribe un archivo en el servidor. Requiere confirmación.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "content": {"type": "string"},
+                },
+                "required": ["path", "content"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "restart_service",
+            "description": "Reinicia un contenedor o servicio. Requiere confirmación.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "service": {"type": "string"},
+                    "kind": {"type": "string", "enum": ["docker", "systemd"]},
+                },
+                "required": ["service"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+
+SERVER_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "server",
+            "description": "Consulta el servidor: estado, logs, listar o leer archivos.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["status", "logs", "list", "read"]},
+                    "target": {"type": "string"},
+                    "path": {"type": "string"},
+                    "lines": {"type": "integer"},
+                },
+                "required": ["action"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_shell",
+            "description": "Ejecuta un comando en el servidor. Los peligrosos piden confirmación.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["command"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_file",
+            "description": "Escribe un archivo en el servidor. Requiere confirmación.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "content": {"type": "string"},
+                },
+                "required": ["path", "content"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "restart_service",
+            "description": "Reinicia un contenedor o servicio. Requiere confirmación.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "service": {"type": "string"},
+                    "kind": {"type": "string", "enum": ["docker", "systemd"]},
+                },
+                "required": ["service"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+
+def as_float(value: object) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).replace(",", "."))
+    except ValueError:
+        return None
+
+
+def is_secret_command(command: str) -> bool:
+    low = command.lower()
+    blocked = (
+        "/opt/credentials",
+        "/etc/restic",
+        "/.ssh",
+        "id_ed25519",
+        "id_rsa",
+        ".env",
+        "printenv",
+        "env |",
+        "env\n",
+        "set |",
+        "docker inspect",
+    )
+    return any(item in low for item in blocked)
+
+
+def is_safe_command(command: str) -> bool:
+    if any(ch in command for ch in ";|&$`<>"):
+        return False
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return False
+    if not parts:
+        return False
+    first = parts[0]
+    if first == "docker":
+        sub = parts[1] if len(parts) > 1 else ""
+        return sub in {"ps", "logs", "inspect", "images", "stats", "version", "info"}
+    if first == "systemctl":
+        sub = parts[1] if len(parts) > 1 else ""
+        return sub == "status"
+    if first == "git":
+        sub = parts[1] if len(parts) > 1 else ""
+        return sub in {"status", "log", "diff", "show", "branch", "remote"}
+    if first == "find":
+        return not any(item in parts for item in ("-delete", "-exec", "-execdir"))
+    return first in {
+        "ls",
+        "cat",
+        "head",
+        "tail",
+        "grep",
+        "df",
+        "free",
+        "uptime",
+        "whoami",
+        "date",
+        "pwd",
+        "stat",
+        "du",
+        "ss",
+        "ps",
+        "echo",
+        "printf",
+        "journalctl",
+    }
+
+
+def ssh_run(command: str, timeout: int | None = None) -> str:
+    if is_secret_command(command):
+        return "No puedo acceder a credenciales."
+    try:
+        proc = subprocess.run(
+            [
+                "ssh",
+                "-i",
+                SSH_KEY,
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+                "-o",
+                "LogLevel=ERROR",
+                SSH_TARGET,
+                command,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout or SSH_TIMEOUT,
+        )
+        out = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
+        out = out.strip() or f"(sin salida, código {proc.returncode})"
+        return redact(out[:4000])
+    except subprocess.TimeoutExpired:
+        return "El comando tardó demasiado."
+    except Exception as exc:  # noqa: BLE001
+        return f"Error de SSH: {type(exc).__name__}"
+
+
+def mark_pending(chat_id: int, tool: str, args: dict, summary: str) -> dict:
+    pending_actions[chat_id] = {"tool": tool, "args": args, "summary": summary}
+    return {"pending": True, "summary": summary}
+
+
+def execute_tool(chat_id: int, name: str, args: dict, force: bool = False) -> dict:
+    try:
+        if name == "server":
+            action = str(args.get("action") or "").lower()
+            if action == "status":
+                return execute_tool(chat_id, "server_status", {})
+            if action == "logs":
+                return execute_tool(
+                    chat_id,
+                    "server_logs",
+                    {
+                        "target": args.get("target"),
+                        "lines": args.get("lines"),
+                        "kind": args.get("kind"),
+                    },
+                )
+            if action == "list":
+                return execute_tool(chat_id, "list_dir", {"path": args.get("path")})
+            if action == "read":
+                return execute_tool(chat_id, "read_file", {"path": args.get("path")})
+            return {"error": "Acción de servidor no válida."}
+
+        if name == "save_body_metric":
+            values: dict[str, float] = {}
+            for key, (low, high) in METRIC_RANGES.items():
+                value = as_float(args.get(key))
+                if value is not None and low <= value <= high:
+                    values[key] = value
+            if not values:
+                return {"error": "No hay datos válidos que guardar."}
+            date = str(args.get("date") or today_iso())
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+                date = today_iso()
+            save_metric(values, date)
+            return {"ok": True, "summary": "Guardado: " + format_metric(values) + "."}
+
+        if name == "save_meal":
+            description = str(args.get("description") or "").strip()
+            if not description:
+                return {"error": "La comida necesita una descripción."}
+            calories = as_float(args.get("calories"))
+            protein = as_float(args.get("protein_g"))
+            carbs = as_float(args.get("carbs_g"))
+            fat = as_float(args.get("fat_g"))
+            save_meal(
+                description,
+                int(round(calories)) if calories is not None else None,
+                protein,
+                carbs,
+                fat,
+                args.get("eaten_at"),
+            )
+            return {"ok": True, "summary": f"Comida registrada: «{description[:200]}»."}
+
+        if name == "save_steps":
+            steps = as_float(args.get("steps"))
+            if steps is None or not (0 <= steps <= 100000):
+                return {"error": "Pasos no válidos."}
+            save_activity(steps=int(steps), log_date=args.get("date"))
+            return {"ok": True, "summary": f"Pasos guardados: {int(steps)}."}
+
+        if name == "save_training":
+            kind = str(args.get("kind") or "other").lower()
+            notes = str(args.get("notes") or "").strip()
+            if not notes:
+                return {"error": "La sesión necesita notas."}
+            duration = as_float(args.get("duration_min"))
+            rpe = as_float(args.get("rpe"))
+            save_training_session(
+                kind,
+                notes,
+                int(duration) if duration is not None else None,
+                rpe,
+                args.get("date"),
+            )
+            return {"ok": True, "summary": f"Sesión de {kind} registrada."}
+
+        if name == "get_progress":
+            return {"ok": True, "summary": progress_context() or "Sin datos todavía."}
+
+        if name == "server_status":
+            return {
+                "ok": True,
+                "summary": ssh_run(
+                    "uptime; free -h; df -h /; docker ps --format '{{.Names}} | {{.Status}}' | head -30"
+                ),
+            }
+
+        if name == "server_logs":
+            target = str(args.get("target") or "").strip()
+            if not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", target):
+                return {"error": "Nombre de servicio no válido."}
+            lines = int(as_float(args.get("lines")) or 40)
+            lines = max(10, min(lines, 200))
+            kind = str(args.get("kind") or "docker")
+            if kind == "systemd":
+                cmd = f"journalctl -u {shlex.quote(target)} -n {lines} --no-pager"
+            else:
+                cmd = f"docker logs --tail {lines} {shlex.quote(target)}"
+            return {"ok": True, "summary": ssh_run(cmd)}
+
+        if name == "list_dir":
+            path = str(args.get("path") or ".").strip()
+            if is_secret_command(path):
+                return {"error": "No puedo listar credenciales."}
+            return {"ok": True, "summary": ssh_run(f"ls -la -- {shlex.quote(path)}")}
+
+        if name == "read_file":
+            path = str(args.get("path") or "").strip()
+            if not path or is_secret_command(path):
+                return {"error": "No puedo leer ese archivo."}
+            return {
+                "ok": True,
+                "summary": ssh_run(f"sed -n '1,200p' -- {shlex.quote(path)}"),
+            }
+
+        if name == "run_shell":
+            command = str(args.get("command") or "").strip()
+            if not command:
+                return {"error": "Comando vacío."}
+            if is_secret_command(command):
+                return {"error": "No puedo ejecutar comandos sobre credenciales."}
+            if not force and not is_safe_command(command):
+                return mark_pending(chat_id, name, args, f"comando: {command}")
+            return {"ok": True, "summary": ssh_run(command)}
+
+        if name == "write_file":
+            path = str(args.get("path") or "").strip()
+            content = str(args.get("content") or "")
+            if not path or is_secret_command(path):
+                return {"error": "No puedo escribir en ese archivo."}
+            if not force:
+                return mark_pending(chat_id, name, args, f"escribir en {path}")
+            encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+            return {
+                "ok": True,
+                "summary": ssh_run(
+                    f"printf '%s' {shlex.quote(encoded)} | base64 -d > {shlex.quote(path)}"
+                ),
+            }
+
+        if name == "restart_service":
+            service = str(args.get("service") or "").strip()
+            if not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", service):
+                return {"error": "Servicio no válido."}
+            kind = str(args.get("kind") or "docker")
+            if not force:
+                return mark_pending(chat_id, name, args, f"reiniciar {kind} {service}")
+            cmd = (
+                f"systemctl restart {shlex.quote(service)}"
+                if kind == "systemd"
+                else f"docker restart {shlex.quote(service)}"
+            )
+            return {"ok": True, "summary": ssh_run(cmd)}
+
+        return {"error": f"Herramienta desconocida: {name}"}
+    except Exception as exc:  # noqa: BLE001
+        log("tool error", name, type(exc).__name__, exc)
+        return {"error": f"No he podido ejecutar {name}."}
+
+
+YES_WORDS = {"si", "sí", "s", "yes", "confirmo", "adelante", "ejecuta", "hazlo", "vale", "ok"}
+NO_WORDS = {"no", "n", "cancela", "cancelar", "para", "stop"}
+
+
+def handle_confirmation(chat_id: int, text: str) -> bool:
+    pending = pending_actions.get(chat_id)
+    if not pending:
+        return False
+    low = text.lower().strip(" .!¡?¿")
+    if low in YES_WORDS:
+        action = pending_actions.pop(chat_id)
+        result = execute_tool(chat_id, action["tool"], action["args"], force=True)
+        reply(chat_id, str(result.get("summary") or result.get("error") or "Hecho."))
+        return True
+    if low in NO_WORDS:
+        pending_actions.pop(chat_id, None)
+        reply(chat_id, "Cancelado.")
+        return True
+    reply(chat_id, f"Tienes pendiente: {pending.get('summary')}. ¿Lo ejecuto? (sí/no)")
+    return True
+
+
+def agent_reply(chat_id: int, text: str) -> bool:
+    if not AGENT_ENABLED:
+        return False
+
+    context = progress_context() or "sin datos todavía"
+    system = (
+        PERSONA
+        + " Hoy es "
+        + today_iso()
+        + ". Contexto real: "
+        + context
+        + ". Eres el agente de servidor de FitGod. Tienes herramientas para consultar estado, "
+        "logs, archivos y ejecutar comandos. Úsalas cuando haga falta; no simules resultados. "
+        "Para acciones peligrosas, la herramienta se quedará pendiente y debes pedir "
+        "confirmación al usuario antes de ejecutar. No reveles credenciales ni tokens. "
+        "No ejecutes acciones destructivas sin confirmación. No toques datos de fitness aquí: "
+        "para eso está el flujo normal del bot."
+    )
+    messages: list[dict] = [{"role": "system", "content": system}]
+    messages.extend(context_messages(chat_id, text))
+
+    called_data = False
+    pending_created = False
+    last_summary = ""
+    data_tools = {"save_body_metric", "save_meal", "save_steps", "save_training"}
+    data_intent = bool(parse_metrics(text)) or parse_steps(text) is not None
+    data_intent = data_intent or bool(re.match(MEAL_PREFIX + r"\b", text, re.I))
+    low = text.lower()
+    data_intent = data_intent or any(
+        marker in low
+        for marker in (
+            "he entrenado",
+            "he hecho push",
+            "he hecho pull",
+            "he hecho legs",
+            "he corrido",
+            "he desayunado",
+            "he comido",
+        )
+    )
+
+    for _ in range(AGENT_MAX_STEPS):
+        typing(chat_id)
+        try:
+            response = session.post(
+                f"{LLM_URL}/v1/chat/completions",
+                json={
+                    "model": LLM_MODEL,
+                    "messages": messages,
+                    "tools": SERVER_TOOLS,
+                    "tool_choice": "auto",
+                    "temperature": 0.3,
+                    "max_tokens": 320,
+                },
+                timeout=240,
+            )
+            if response.status_code >= 300:
+                log("agent status", response.status_code, response.text[:200])
+                return False
+            msg = response.json()["choices"][0]["message"]
+        except Exception as exc:  # noqa: BLE001
+            log("agent error", type(exc).__name__, exc)
+            return False
+
+        tool_calls = msg.get("tool_calls") or []
+        if tool_calls:
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": msg.get("content") or "",
+                    "tool_calls": tool_calls,
+                }
+            )
+            for index, call in enumerate(tool_calls):
+                function = call.get("function") or {}
+                name = function.get("name") or ""
+                raw_args = function.get("arguments") or "{}"
+                try:
+                    args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                except ValueError:
+                    args = {}
+                if not isinstance(args, dict):
+                    args = {}
+                if name in data_tools:
+                    called_data = True
+                result = execute_tool(chat_id, name, args)
+                if name in data_tools and result.get("summary"):
+                    last_summary = str(result["summary"])
+                if result.get("pending"):
+                    pending_created = True
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.get("id") or f"call_{index}",
+                        "content": json.dumps(result, ensure_ascii=False),
+                    }
+                )
+            continue
+
+        content = (msg.get("content") or "").strip()
+        if data_intent and not called_data:
+            log("agent data fallback", text[:120])
+            return False
+        if called_data and not content:
+            reply(chat_id, last_summary or "Hecho. Lo he registrado.")
+            return True
+        if content:
+            if pending_created and not any(
+                word in content.lower() for word in ("confirm", "sí", "si ")
+            ):
+                content += "\n\n¿Confirmas? (sí/no)"
+            reply(chat_id, content)
+            return True
+        return False
+
+    reply(chat_id, "No he podido completar la acción.")
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -1074,7 +1783,7 @@ def handle_plan_talk(chat_id: int, text: str) -> bool:
     return False
 
 
-def handle_text(chat_id: int, text: str, source: str = "text") -> None:
+def handle_text_legacy(chat_id: int, text: str, source: str = "text") -> None:
     clean = " ".join(text.strip().split())
     if not clean:
         reply(chat_id, "No he entendido nada. Prueba con /ayuda.")
@@ -1214,6 +1923,71 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
         return
 
     handle_text_fallback(chat_id, clean, source)
+
+
+SERVER_HINTS = (
+    "servidor",
+    "server",
+    "docker",
+    "contenedor",
+    "contenedores",
+    "logs",
+    "log ",
+    "estado del",
+    "memoria",
+    "disco",
+    "cpu",
+    "reinicia",
+    "reiniciar",
+    "arranca",
+    "detén",
+    "deten",
+    "para el",
+    "ejecuta",
+    "comando",
+    "terminal",
+    "shell",
+    "archivo",
+    "carpeta",
+    "directorio",
+    "lee el",
+    "lee /",
+    "mira el",
+    "proceso",
+    "servicio",
+    "systemd",
+    "git ",
+    "despliega",
+    "deploy",
+    "backup",
+    "copia de seguridad",
+)
+
+
+def is_server_request(text: str) -> bool:
+    low = text.lower()
+    return any(hint in low for hint in SERVER_HINTS)
+
+
+def handle_text(chat_id: int, text: str, source: str = "text") -> None:
+    clean = " ".join(text.strip().split())
+    if not clean:
+        reply(chat_id, "No he entendido nada. Prueba con /ayuda.")
+        return
+
+    normalized = clean.lower().strip(" !¡?¿.")
+    if handle_confirmation(chat_id, clean):
+        return
+    if normalized in {"/start", "start", "/ayuda", "ayuda", "help", "/help"}:
+        reply(chat_id, HELP)
+        return
+    if any(hint in clean.lower() for hint in VOICE_CHOICE_HINTS):
+        reply(chat_id, "Perfecto, me quedo con la voz actual (davefx). No cambio nada.")
+        return
+
+    if is_server_request(clean) and AGENT_ENABLED and agent_reply(chat_id, clean):
+        return
+    handle_text_legacy(chat_id, clean, source)
 
 
 def photo_view(caption: str) -> tuple[str, str | None]:
