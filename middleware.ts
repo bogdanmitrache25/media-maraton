@@ -13,7 +13,8 @@ const isPublic = (pathname: string) =>
   pathname === '/' ||
   pathname === '/login' ||
   pathname.startsWith('/auth/') ||
-  pathname.startsWith('/api/cron/');
+  pathname.startsWith('/api/cron/') ||
+  pathname.startsWith('/api/health/');
 
 /**
  * Cabeceras de seguridad. La CSP se construye con un nonce por petición, así
