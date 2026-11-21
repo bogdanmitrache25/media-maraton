@@ -38,6 +38,25 @@ TTS_MODEL = os.environ.get("TTS_MODEL", "piper")
 TTS_VOICE = os.environ.get("TTS_VOICE", "es_ES-davefx-medium")
 TTS_MAX_CHARS = int(os.environ.get("TTS_MAX_CHARS", "2500"))
 OFFSET_FILE = os.environ.get("OFFSET_FILE", "/data/offset")
+MESSAGE_LOG = os.environ.get("MESSAGE_LOG", "/data/messages.jsonl")
+LLM_REPLIES = os.environ.get("LLM_REPLIES", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
+
+PERSONA = (
+    "Eres FitGod, el coach personal de Bogdan. Hablas español de España, directo, "
+    "cercano, con humor seco y sin rodeos. No eres un asistente genérico: eres su "
+    "entrenador y nutricionista de cabecera. Eres crítico cuando hace falta, pero no "
+    "condescendiente. No repitas frases hechas ni empieces siempre igual. No inventes "
+    "datos ni planes. Si falta información, pide una sola cosa concreta. Tutea siempre; "
+    "nunca uses usted. No parafrasees nombres de comidas ni datos: repítelos tal cual. "
+    "No inventes comidas, pesos, anécdotas, promesas ni conversaciones pasadas. "
+    "No preguntes por comidas si el dato no es una comida. Haz como máximo una pregunta. "
+    "Responde en 1-3 frases."
+)
 
 TIME_ZONE = ZoneInfo("Europe/Madrid")
 TG_API = f"https://api.telegram.org/bot{TOKEN}"
@@ -113,8 +132,35 @@ def send_audio(chat_id: int, audio: bytes) -> None:
         log("sendAudio error", type(exc).__name__, exc)
 
 
+def log_message(chat_id: int, direction: str, text: str) -> None:
+    try:
+        os.makedirs(os.path.dirname(MESSAGE_LOG), exist_ok=True)
+        with open(MESSAGE_LOG, "a", encoding="utf-8") as fh:
+            fh.write(
+                json.dumps(
+                    {
+                        "ts": now_iso(),
+                        "chat_id": chat_id,
+                        "direction": direction,
+                        "text": text[:4000],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+    except OSError as exc:
+        log("message log error", exc)
+
+
+def append_history(chat_id: int, role: str, text: str) -> None:
+    history.setdefault(chat_id, []).append({"role": role, "content": text[:4000]})
+    history[chat_id] = history[chat_id][-12:]
+
+
 def reply(chat_id: int, text: str) -> None:
     tg("sendMessage", chat_id=chat_id, text=text[:4096], disable_web_page_preview=True)
+    log_message(chat_id, "out", text)
+    append_history(chat_id, "assistant", text)
     audio = tts_audio(text)
     if audio:
         send_audio(chat_id, audio)
@@ -341,6 +387,22 @@ def progress_context() -> str:
                 "limit": "20",
             },
         )
+        activity = rest_get(
+            "daily_activity",
+            {
+                "select": "steps,sleep_hours",
+                "log_date": "eq." + today_iso(),
+                "limit": "1",
+            },
+        )
+        training = rest_get(
+            "training_sessions",
+            {
+                "select": "session_date,kind,notes",
+                "order": "session_date.desc",
+                "limit": "1",
+            },
+        )
     except Exception as exc:  # noqa: BLE001
         log("context error", type(exc).__name__, exc)
         return ""
@@ -367,6 +429,16 @@ def progress_context() -> str:
         parts.append(f"Comidas de hoy: {len(todays)} ({kcal} kcal registradas)")
     else:
         parts.append("Comidas de hoy: ninguna registrada")
+
+    if activity:
+        a = activity[0]
+        if a.get("steps") is not None:
+            parts.append(f"Pasos hoy: {a['steps']}")
+        if a.get("sleep_hours") is not None:
+            parts.append(f"Sueño: {a['sleep_hours']} h")
+    if training:
+        t = training[0]
+        parts.append(f"Último entreno: {t.get('kind')} ({t.get('session_date')})")
 
     return " · ".join(parts)
 
@@ -505,41 +577,111 @@ def parse_steps(text: str) -> int | None:
 # LLM local: conversación y extracción de comidas libres
 # ---------------------------------------------------------------------------
 
-def llm_chat(chat_id: int, text: str) -> str | None:
-    context = progress_context() or "sin datos todavía"
-    system = (
-        "Eres un coach real de entrenamiento y nutrición. Responde en español de España, "
-        "en 2-4 frases, con tono cercano y sin rodeos. No repitas literalmente al usuario. "
-        "Usa solo este contexto real: "
-        f"{context}. Si no hay datos, dilo. No inventes cifras ni planes ni des consejos médicos. "
-        "Si el usuario dice que se pesará o que entrenará, responde a eso; no digas que "
-        "no hay pesajes. Usa 'me enviarás', no 'te enviarás'. No uses la palabra 'dieta' "
-        "salvo que el usuario la use. Si el mensaje va de la voz del bot o de elegir una voz, "
-        "confirma la elección y no hables de pesajes ni comidas."
-    )
-    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
-    messages.extend(history.get(chat_id, [])[-6:])
-    messages.append({"role": "user", "content": text})
+def context_messages(chat_id: int, text: str | None = None) -> list[dict[str, str]]:
+    messages = list(history.get(chat_id, [])[-8:])
+    if text and (
+        not messages
+        or messages[-1].get("role") != "user"
+        or messages[-1].get("content") != text
+    ):
+        messages.append({"role": "user", "content": text})
+    return messages
 
+
+def llm_complete(
+    system: str,
+    chat_id: int,
+    text: str | None = None,
+    temperature: float = 0.5,
+    max_tokens: int = 180,
+) -> str | None:
+    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+    messages.extend(context_messages(chat_id, text))
     try:
         response = session.post(
             f"{LLM_URL}/v1/chat/completions",
             json={
                 "model": LLM_MODEL,
                 "messages": messages,
-                "temperature": 0.2,
-                "max_tokens": 220,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
             },
             timeout=180,
         )
         if response.status_code >= 300:
-            log("llm chat status", response.status_code, response.text[:200])
+            log("llm status", response.status_code, response.text[:200])
             return None
         content = response.json()["choices"][0]["message"]["content"] or ""
         return content.strip() or None
     except Exception as exc:  # noqa: BLE001
-        log("llm chat error", type(exc).__name__, exc)
+        log("llm error", type(exc).__name__, exc)
         return None
+
+
+def llm_chat(chat_id: int, text: str) -> str | None:
+    context = progress_context() or "sin datos todavía"
+    system = (
+        PERSONA
+        + " Contexto real: "
+        + context
+        + ". No inventes cifras ni planes ni des consejos médicos. "
+        "Si el usuario dice que se pesará o que entrenará, responde a eso; no digas "
+        "que no hay pesajes. Usa 'me enviarás', no 'te enviarás'. No uses la palabra "
+        "'dieta' salvo que el usuario la use. Tutea. No supongas que no ha comido; si no "
+        "hay comidas registradas, dilo sin inventar. Si el mensaje va de la voz del bot o "
+        "de elegir una voz, confirma la elección y no hables de pesajes ni comidas."
+    )
+    return llm_complete(system, chat_id, text=text, temperature=0.45, max_tokens=220)
+
+
+def natural_reply(chat_id: int, facts: str, hint: str = "") -> None:
+    """Confirmación con voz propia del coach, no una plantilla fija."""
+    if not LLM_REPLIES:
+        reply(chat_id, facts)
+        return
+    typing(chat_id)
+    context = progress_context() or "sin datos todavía"
+    system = (
+        PERSONA
+        + " Contexto real: "
+        + context
+        + ". "
+        + hint
+        + " Acaba de pasar esto: "
+        + facts
+        + " Responde al usuario confirmando o comentando, en 1-3 frases, con naturalidad, "
+        "sin repetir fórmulas ni sonar a plantilla. No inventes datos. No añadas datos "
+        "que no estén en 'Acaba de pasar' ni supongas que no ha comido. No inventes "
+        "anécdotas ni conversaciones pasadas. Repite los nombres de comida tal cual. "
+        "Si falta un dato, pide una sola cosa concreta."
+    )
+    answer = llm_complete(system, chat_id, temperature=0.35, max_tokens=140)
+    if answer:
+        reply(chat_id, answer)
+    else:
+        reply(chat_id, facts)
+
+
+def progress_reply(chat_id: int) -> None:
+    """Datos exactos + un comentario breve del coach."""
+    context = progress_context()
+    summary = ("Esto es lo que tengo: " + context + ".") if context else "Todavía no tengo datos."
+    if not LLM_REPLIES:
+        reply(chat_id, summary)
+        return
+    typing(chat_id)
+    system = (
+        PERSONA
+        + " Basándote solo en este resumen exacto, haz una sola pregunta breve y útil al "
+        "usuario. No valores, no inventes tendencias ni cifras y no preguntes por comidas. "
+        "Resumen: "
+        + summary
+    )
+    comment = llm_complete(system, chat_id, temperature=0.35, max_tokens=60)
+    if comment:
+        reply(chat_id, summary + "\n\n" + comment)
+    else:
+        reply(chat_id, summary)
 
 
 MEAL_SYSTEM = """Devuelve SOLO un JSON válido, sin markdown ni texto fuera del JSON.
@@ -823,10 +965,10 @@ def handle_completed_training(chat_id: int, text: str) -> bool:
             if kind == "run"
             else "ejercicios, series, peso y RPE"
         )
-        reply(
+        natural_reply(
             chat_id,
-            f"Sesión registrada: {labels[kind]}. He guardado el texto; cuando quieras "
-            f"la estructuramos por {detail}.",
+            f"Ha registrado una sesión de {labels[kind]}. Texto: {text[:500]}",
+            hint=f"Confirma que lo has guardado. Si encaja, pide un dato que falte: {detail}.",
         )
     except Exception as exc:  # noqa: BLE001
         log("training save error", type(exc).__name__, exc)
@@ -837,10 +979,29 @@ def handle_completed_training(chat_id: int, text: str) -> bool:
 def handle_plan_talk(chat_id: int, text: str) -> bool:
     """Charla de planificación: entreno de esta tarde, pesaje de mañana, etc."""
     low = text.lower()
+
+    negative = any(
+        key in low
+        for key in (
+            "no se si entrenar",
+            "no sé si entrenar",
+            "no voy a entrenar",
+            "no entrenar",
+            "dudo si entrenar",
+            "estoy cansado",
+            "estoy reventado",
+            "me duele",
+            "no me apetece entrenar",
+        )
+    )
+    if negative:
+        return False
+
     training = any(
         key in low
         for key in (
             "voy a entrenar",
+            "vaya a entrenar",
             "voy al gym",
             "voy al gimnasio",
             "esta tarde entreno",
@@ -854,7 +1015,6 @@ def handle_plan_talk(chat_id: int, text: str) -> bool:
             "haré legs",
             "haré piernas",
             "entrenaré",
-            "entrenar",
         )
     )
     weigh = any(
@@ -875,11 +1035,12 @@ def handle_plan_talk(chat_id: int, text: str) -> bool:
     )
 
     if training and weigh:
-        reply(
+        natural_reply(
             chat_id,
-            "Perfecto. Esta tarde, cuando vuelvas del push o pull, me cuentas qué has hecho "
-            "y lo registramos. Mañana en ayunas me mandas el BodyTrax, las medidas, las fotos "
-            "y la cinta. Aquí estoy.",
+            "Ha dicho que esta tarde probablemente entrenará push o pull y que mañana en "
+            "ayunas se pesará y mandará BodyTrax, medidas, fotos y cinta.",
+            hint="Confirma el plan y recuérdale que te cuente la sesión al terminar. No le "
+            "des instrucciones nuevas.",
         )
         return True
 
@@ -894,18 +1055,19 @@ def handle_plan_talk(chat_id: int, text: str) -> bool:
             session = "legs"
         else:
             session = "la sesión"
-        reply(
+        natural_reply(
             chat_id,
-            f"Perfecto. Cuando termines {session}, cuéntame ejercicios, series, peso y RPE "
-            "y lo registramos.",
+            f"Ha dicho que va a entrenar {session}.",
+            hint="Confirma y pídele que al terminar te cuente ejercicios, series, peso y RPE. "
+            "No preguntes por comidas.",
         )
         return True
 
     if weigh:
-        reply(
+        natural_reply(
             chat_id,
-            "Perfecto. Mañana en ayunas con el BodyTrax, las medidas, las fotos y la cinta. "
-            "Te espero por aquí.",
+            "Ha dicho que mañana se pesará en ayunas y te mandará fotos.",
+            hint="Confirma y recuérdale BodyTrax, medidas, fotos y cinta. No preguntes por comidas.",
         )
         return True
 
@@ -940,7 +1102,12 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
             return
         try:
             save_meal(description)
-            reply(chat_id, f"Comida registrada: «{description[:300]}».")
+            natural_reply(
+                chat_id,
+                f"Ha registrado la comida: «{description[:300]}».",
+                hint="Confirma la comida. No repitas la cantidad si ya está en el texto; "
+                "puedes preguntar por los macros o no preguntar nada.",
+            )
         except Exception as exc:  # noqa: BLE001
             log("meal save error", type(exc).__name__, exc)
             reply(chat_id, "No he podido guardar la comida.")
@@ -951,7 +1118,12 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
     if values:
         try:
             save_metric(values)
-            reply(chat_id, "Guardado: " + format_metric(values) + ".")
+            natural_reply(
+                chat_id,
+                "Ha registrado: " + format_metric(values) + ".",
+                hint="Confirma el dato. No preguntes por comidas; puedes preguntar por otro "
+                "dato corporal o no preguntar nada.",
+            )
         except Exception as exc:  # noqa: BLE001
             log("metric save error", type(exc).__name__, exc)
             reply(chat_id, "No he podido guardar la medición.")
@@ -961,7 +1133,11 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
     if steps is not None:
         try:
             save_activity(steps=steps)
-            reply(chat_id, f"Pasos guardados: {steps:,}".replace(",", ".") + " (hoy).")
+            natural_reply(
+                chat_id,
+                f"Ha registrado {steps} pasos hoy.",
+                hint="Confirma y comenta algo breve solo si encaja.",
+            )
         except Exception as exc:  # noqa: BLE001
             log("steps save error", type(exc).__name__, exc)
             reply(chat_id, "No he podido guardar los pasos.")
@@ -986,11 +1162,7 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
         "cómo va",
     )
     if any(phrase in low for phrase in progress_phrases):
-        context = progress_context()
-        reply(
-            chat_id,
-            ("Esto es lo que tengo: " + context + ".") if context else "Todavía no tengo datos.",
-        )
+        progress_reply(chat_id)
         return
 
     if handle_plan_talk(chat_id, clean):
@@ -1003,9 +1175,6 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
         answer = llm_chat(chat_id, clean)
         if answer:
             reply(chat_id, answer)
-            history.setdefault(chat_id, []).append({"role": "user", "content": clean})
-            history[chat_id].append({"role": "assistant", "content": answer})
-            history[chat_id] = history[chat_id][-8:]
             return
         handle_text_fallback(chat_id, clean, source)
         return
@@ -1026,12 +1195,12 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
                 if meal["calories"] is not None
                 else ""
             )
-            reply(chat_id, f"Comida registrada: «{meal['description'][:300]}»{extra}.")
-            history.setdefault(chat_id, []).append({"role": "user", "content": clean})
-            history[chat_id].append(
-                {"role": "assistant", "content": f"Comida registrada: {meal['description']}"}
+            natural_reply(
+                chat_id,
+                f"Ha registrado la comida: «{meal['description'][:300]}»{extra}.",
+                hint="Confirma la comida. No repitas la cantidad si ya está en el texto; "
+                "puedes preguntar por los macros o no preguntar nada.",
             )
-            history[chat_id] = history[chat_id][-8:]
             return
         except Exception as exc:  # noqa: BLE001
             log("free meal save error", type(exc).__name__, exc)
@@ -1042,9 +1211,6 @@ def handle_text(chat_id: int, text: str, source: str = "text") -> None:
     answer = llm_chat(chat_id, clean)
     if answer:
         reply(chat_id, answer)
-        history.setdefault(chat_id, []).append({"role": "user", "content": clean})
-        history[chat_id].append({"role": "assistant", "content": answer})
-        history[chat_id] = history[chat_id][-8:]
         return
 
     handle_text_fallback(chat_id, clean, source)
@@ -1076,7 +1242,10 @@ def handle_update(update: dict) -> None:
         if "photo" in message:
             photos = sorted(message["photo"], key=lambda p: p.get("file_size", 0))
             file_id = photos[-1]["file_id"]
-            view, notes = photo_view(message.get("caption", ""))
+            caption = message.get("caption", "")
+            log_message(chat_id, "in", "[foto] " + (caption or ""))
+            append_history(chat_id, "user", "[foto] " + (caption or ""))
+            view, notes = photo_view(caption)
             path = upload_photo(file_id, view, notes)
             reply(chat_id, f"Foto guardada: vista {view}. Ruta privada: {path}")
             return
@@ -1087,10 +1256,14 @@ def handle_update(update: dict) -> None:
             if not text:
                 reply(chat_id, "No he podido transcribir el audio.")
                 return
+            log_message(chat_id, "in", "[voz] " + text)
+            append_history(chat_id, "user", "[voz] " + text)
             handle_text(chat_id, text, source="voice")
             return
 
         if "text" in message:
+            log_message(chat_id, "in", message["text"])
+            append_history(chat_id, "user", message["text"])
             handle_text(chat_id, message["text"])
     except Exception as exc:  # noqa: BLE001 - el bot no debe morirse por un mensaje
         log("ERROR", type(exc).__name__, exc)
@@ -1149,3 +1322,4 @@ if __name__ == "__main__":
     except Exception as exc:  # noqa: BLE001
         log("fatal", type(exc).__name__, exc)
         sys.exit(1)
+
