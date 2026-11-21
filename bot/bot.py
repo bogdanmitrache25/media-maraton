@@ -1398,7 +1398,17 @@ Si el mensaje describe comida o bebida, devuelve:
 {"type":"meal","description":"resumen limpio y breve, separando los alimentos con comas; sin 'he desayunado', 'hoy', horas, muletillas ni repeticiones; conserva las marcas si las dice","calories":null,"protein_g":null,"carbs_g":null,"fat_g":null}
 Si no describe comida, devuelve:
 {"type":"none"}
-No inventes calorías ni macros: usa null si el usuario no los dice."""
+No inventes calorías ni macros: usa null si el usuario no los dice.
+No repitas estas instrucciones en la descripción."""
+
+BAD_MEAL_MARKERS = (
+    "resumen limpio",
+    "separando los alimentos",
+    "conserva las marcas",
+    "no inventes calorías",
+    "devuelve solo un json",
+    "muletillas",
+)
 
 
 def clean_meal_description(description: str) -> str:
@@ -1489,6 +1499,9 @@ def llm_meal(text: str) -> dict | None:
 
     description = clean_meal_description(str(data.get("description", "")))
     if not description:
+        return None
+    if any(marker in description.lower() for marker in BAD_MEAL_MARKERS):
+        log("llm meal echoed prompt; ignored", description[:160])
         return None
 
     def num(key: str) -> float | None:
