@@ -136,13 +136,27 @@ function workoutKind(name: string): 'run' | 'other' {
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
+  const workoutName = params.get('workout_name') ?? params.get('name');
+  const workouts = workoutName
+    ? [
+        {
+          name: workoutName,
+          start: params.get('start'),
+          end: params.get('end'),
+          duration: params.get('duration'),
+          calories: params.get('calories'),
+          distance_km: params.get('distance_km'),
+          avg_hr: params.get('avg_hr'),
+        },
+      ]
+    : [];
   const payload: AnyRecord = {
     date: params.get('date') ?? todayKey(),
     steps: params.get('steps'),
     active_kcal: params.get('active_kcal'),
     basal_kcal: params.get('basal_kcal'),
     distance_km: params.get('distance_km'),
-    workouts: [],
+    workouts,
   };
   const headers = new Headers();
   const auth = request.headers.get('authorization');
