@@ -24,6 +24,7 @@ function sha256(value: string): string {
 
 function numberFrom(value: unknown): number | null {
   if (value === null || value === undefined || typeof value === 'boolean') return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
   if (typeof value === 'object') {
     const object = value as AnyRecord;
     return (
