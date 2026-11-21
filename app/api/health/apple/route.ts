@@ -133,6 +133,28 @@ function workoutKind(name: string): 'run' | 'other' {
   return /run|carrera|correr|running|trail/.test(low) ? 'run' : 'other';
 }
 
+export async function GET(request: Request) {
+  const params = new URL(request.url).searchParams;
+  const payload: AnyRecord = {
+    date: params.get('date') ?? todayKey(),
+    steps: params.get('steps'),
+    active_kcal: params.get('active_kcal'),
+    basal_kcal: params.get('basal_kcal'),
+    distance_km: params.get('distance_km'),
+    workouts: [],
+  };
+  const headers = new Headers();
+  const auth = request.headers.get('authorization');
+  if (auth) headers.set('authorization', auth);
+  headers.set('content-type', 'application/json');
+  const synthetic = new Request(request.url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+  return POST(synthetic);
+}
+
 export async function POST(request: Request) {
   const token = tokenFrom(request);
   if (!token) {
