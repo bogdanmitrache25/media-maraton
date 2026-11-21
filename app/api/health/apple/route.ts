@@ -267,7 +267,7 @@ export async function POST(request: Request) {
       workout.energy_units ?? workout.units,
     );
     const distance = kmFrom(
-      workout.distance ?? workout.totalDistance,
+      workout.distance_km ?? workout.distance ?? workout.totalDistance,
       workout.distance_units ?? workout.units,
     );
     const duration = durationMinutes(
