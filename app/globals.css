@@ -1692,3 +1692,24 @@ select.input {
   line-height: 1.5;
 }
 
+.prog-pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.prog-pager a {
+  color: var(--signal);
+  text-decoration: none;
+}
+
+.prog-pager a:hover {
+  text-decoration: underline;
+}
+

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { deleteMeal, saveBodyMetric, saveMeal } from '@/app/progreso/actions';
 
@@ -48,6 +49,9 @@ interface Props {
   initialMetrics: BodyMetricRow[];
   initialMeals: MealRow[];
   initialPhotos: PhotoRow[];
+  initialTab?: Tab;
+  photoPage?: number;
+  hasMorePhotos?: boolean;
 }
 
 type Tab = 'resumen' | 'comidas' | 'fotos';
@@ -134,9 +138,18 @@ function Stat({
   );
 }
 
-export function ProgressApp({ name, today, initialMetrics, initialMeals, initialPhotos }: Props) {
+export function ProgressApp({
+  name,
+  today,
+  initialMetrics,
+  initialMeals,
+  initialPhotos,
+  initialTab = 'resumen',
+  photoPage = 1,
+  hasMorePhotos = false,
+}: Props) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('resumen');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [toast, setToast] = useState<string | null>(null);
   const [savingMetric, setSavingMetric] = useState(false);
   const [savingMeal, setSavingMeal] = useState(false);
@@ -595,7 +608,9 @@ export function ProgressApp({ name, today, initialMetrics, initialMeals, initial
 
           {initialPhotos.length === 0 ? (
             <div className="prog-card">
-              <p className="soft">Todavía no hay fotos.</p>
+              <p className="soft">
+                {photoPage > 1 ? 'No hay más fotos en esta página.' : 'Todavía no hay fotos.'}
+              </p>
             </div>
           ) : (
             <div className="prog-photos">
@@ -616,6 +631,22 @@ export function ProgressApp({ name, today, initialMetrics, initialMeals, initial
                 </figure>
               ))}
             </div>
+          )}
+
+          {(photoPage > 1 || hasMorePhotos) && (
+            <nav className="prog-pager" aria-label="Paginación de fotos">
+              {photoPage > 1 ? (
+                <Link href={`/progreso?tab=fotos&photoPage=${photoPage - 1}`}>Más recientes</Link>
+              ) : (
+                <span />
+              )}
+              <span>Página {photoPage}</span>
+              {hasMorePhotos ? (
+                <Link href={`/progreso?tab=fotos&photoPage=${photoPage + 1}`}>Más antiguas</Link>
+              ) : (
+                <span />
+              )}
+            </nav>
           )}
         </section>
       )}

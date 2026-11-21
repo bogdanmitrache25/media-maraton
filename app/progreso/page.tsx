@@ -14,7 +14,16 @@ export const metadata: Metadata = {
   title: 'Progreso · Media Maratón 1:55',
 };
 
-export default async function ProgressPage() {
+export default async function ProgressPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string; photoPage?: string }>;
+}) {
+  const params = await searchParams;
+  const photoPage = Math.max(1, Number.parseInt(params.photoPage ?? '1', 10) || 1);
+  const photoPageSize = 24;
+  const photoFrom = (photoPage - 1) * photoPageSize;
+
   const { supabase, user } = await createClientWithUser();
   if (!user) redirect('/login');
 
@@ -38,7 +47,7 @@ export default async function ProgressPage() {
       .select('id, taken_on, view, storage_path, notes')
       .eq('user_id', user.id)
       .order('taken_on', { ascending: false })
-      .limit(24),
+      .range(photoFrom, photoFrom + photoPageSize),
     supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle(),
   ]);
 
@@ -72,8 +81,10 @@ export default async function ProgressPage() {
     source: r.source,
   }));
 
+  const photoRows = (photosRes.data ?? []).slice(0, photoPageSize);
+  const hasMorePhotos = (photosRes.data ?? []).length > photoPageSize;
   const photos: PhotoRow[] = await Promise.all(
-    (photosRes.data ?? []).map(async (r) => {
+    photoRows.map(async (r) => {
       const { data } = await supabase.storage
         .from('progress')
         .createSignedUrl(r.storage_path, 60 * 60 * 24 * 7);
@@ -94,6 +105,9 @@ export default async function ProgressPage() {
       initialMetrics={metrics}
       initialMeals={meals}
       initialPhotos={photos}
+      initialTab={params.tab === 'fotos' ? 'fotos' : 'resumen'}
+      photoPage={photoPage}
+      hasMorePhotos={hasMorePhotos}
     />
   );
 }
